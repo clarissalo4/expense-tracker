@@ -556,6 +556,18 @@
       .fx-trow .trate{ color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
       @media (max-width:640px){ .fx-grid{ gap:8px; } .fx-swap{ width:38px; height:38px; } }
     </style>
+    <style id="batch-style">
+      /* ===== AI 入帳：一次入幾筆 ===== */
+      .chat-input-row textarea{ flex:1; min-width:0; border-radius:14px; background:var(--surface2); border-color:transparent;
+        padding:10px 14px; resize:none; max-height:118px; line-height:1.45; font:inherit; color:var(--ink); }
+      .chat-input-row textarea:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 4px rgba(0,113,227,.18); background:var(--surface); }
+      .pv-batch{ align-self:stretch; max-width:100%; display:flex; flex-direction:column; gap:9px; }
+      .pv-batch .pv-card{ align-self:stretch; }
+      .pv-foot{ background:var(--surface2); border-radius:16px; padding:14px 16px; animation:msgIn .42s cubic-bezier(.22,1,.36,1) both; }
+      .pv-foot .pv-t{ font-weight:700; font-size:14.5px; margin-bottom:8px; }
+      .pv-foot .act{ margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; }
+      .pv-card button.pv-del{ color:var(--red); }
+    </style>
   </head>
   <body>
     <header class="topbar">
@@ -817,10 +829,10 @@
           <h2 id="chatTitle">同 Gemini 講入帳</h2>
           <button type="button" id="btnChatClose">關閉</button>
         </div>
-        <p class="hint" style="margin-bottom:10px">打一句說話就得（例如「漢堡 50」），AI 會自動分辨支出／收入、金額、類別同備註，再問你用邊個帳戶。入帳前有預覽俾你核對同改類型，撳「確認儲存」先會入帳。打「新增帳戶 中銀」可以加帳戶；未設定 Key 或連唔到，會自動用本地關鍵字分辨。</p>
+        <p class="hint" style="margin-bottom:10px">打一句就得（例如「漢堡 50」），AI 自動分辨支出／收入、金額、類別同備註，再問你用邊個帳戶，核對預覽撳確認先入帳。一次入幾筆：用「、」或者換行分開，例如「午餐 68、搭車 12、咖啡 35」，逐筆出卡俾你核對，撳一次確認入晒。打「新增帳戶 中銀」可以加帳戶；未設定 Key 或連唔到，會自動用本地關鍵字分辨。</p>
         <div class="chat-msgs" id="chatMsgs"></div>
         <div class="chat-input-row" id="chatInputRow" style="display:none">
-          <input type="text" id="chatText" placeholder="例如：漢堡 50、搭車 100、lunch 68" autocomplete="off" />
+          <textarea id="chatText" rows="1" placeholder="例如：漢堡 50；一次入幾筆就打「午餐 68、搭車 12、咖啡 35」" autocomplete="off"></textarea>
           <button type="button" class="primary" id="btnChatSend">送出</button>
         </div>
       </div>
@@ -2131,7 +2143,7 @@ host.innerHTML = html;
 
 /* ================= AI 入帳 chatbox ================= */
 var GEMINI_KEY_LS = "jizhang.geminiKey.v1";
-var chat = { type: 0, acc: "", parsed: null, busy: false, awaitingAcc: false };
+var chat = { type: 0, acc: "", parsed: null, batch: null, busy: false, awaitingAcc: false };
 function chatMsgs(){ return $("chatMsgs"); }
 function scrollChat(){
 var m = chatMsgs(); if(!m) return;
@@ -2181,7 +2193,7 @@ chatMsgs().appendChild(row); scrollChat();
 }
 function askText(){
 $("chatInputRow").style.display = "";
-botSay("打一句講你使咗或者收到咩錢就得，例如「漢堡 50」、「搭車 100」或者「出糧 5000」，我會自動分辨支出／收入同類別。");
+botSay("打你使咗或者收到咩錢就得，例如「漢堡 50」或者「出糧 5000」，我會自動分辨支出／收入同類別。一次入幾筆都得：用「、」或者換行分開，例如「午餐 68、搭車 12、咖啡 35」，我會逐筆分辨，俾你逐張卡核對，撳一次確認入晒。");
 setTimeout(function(){ $("chatText").focus(); }, 320);
 }
 function askAccountStep(){
@@ -2199,13 +2211,21 @@ chat.acc = "";
 for(var i=records.length-1;i>=0;i--){ if(records[i].acc && list.indexOf(records[i].acc)>-1){ chat.acc = records[i].acc; break; } }
 if(!chat.acc) chat.acc = list[0];
 }
+if(chat.batch){
+botSay("分辨到 " + chat.batch.length + " 筆。逐張卡核對之前，呢幾筆一齊用邊個帳戶？（之後逐張卡都可以再改返）");
+} else {
 var sum = (chat.type===0? "支出": "收入") + " · " + p.category + " · " + fmtMoney(Math.round(p.amount*100));
 if(p.note && p.note!==p.category) sum += " · " + p.note;
 botSay("分辨到：" + sum + "。呢筆用邊個帳戶？");
+}
 var defIdx = list.indexOf(chat.acc); if(defIdx<0) defIdx = 0;
 chipRow(list, function(idx, lb){
 chat.acc = lb; meSay(lb);
-setTimeout(function(){ if($("chatOverlay").classList.contains("open")) showPreview(false); }, 240);
+setTimeout(function(){
+if(!$("chatOverlay").classList.contains("open")) return;
+if(chat.batch){ chat.batch.forEach(function(it){ it.acc = chat.acc; }); showBatchPreview(); }
+else showPreview(false);
+}, 240);
 }, defIdx);
 var row = document.createElement("div");
 row.className = "chip-row";
@@ -2325,6 +2345,8 @@ return geminiParse(text).catch(function(){ return localParse(text); });
 function pvRow(k, v){ return '<div class="pv-row"><span class="k">' + k + '</span><span class="v">' + esc(v) + "</span></div>"; }
 function showPreview(editing){
 var p = chat.parsed;
+var oldB = chatMsgs().querySelector(".pv-batch");
+if(oldB) oldB.remove();
 var old = chatMsgs().querySelector(".pv-card");
 if(old) old.remove();
 var card = document.createElement("div");
@@ -2405,12 +2427,155 @@ row.appendChild(b);
 chatMsgs().appendChild(row); scrollChat();
 chat.parsed = null;
 }
+/* ===== 一次入幾筆：拆句、逐筆分辨、逐張卡預覽、一次確認入晒 ===== */
+function splitEntries(text){
+var t = String(text);
+var prev;
+do{ prev = t; t = t.replace(/(\d)[,，](\d)/g, "$1$2"); }while(t!==prev);
+return t.split(/[\n、，,；;／]+/).map(function(s){ return s.trim(); }).filter(function(s){ return s.length>0; });
+}
+function parseEntries(segs){
+return Promise.all(segs.map(function(s){
+return parseEntry(s).then(function(p){ return { seg: s, parsed: p }; }).catch(function(){ return { seg: s, parsed: null }; });
+}));
+}
+function batchCard(p, idx, editing){
+var card = document.createElement("div");
+card.className = "pv-card";
+if(!editing){
+card.innerHTML = '<div class="pv-t">第 ' + (idx+1) + ' 筆（' + esc(p.source) + '）</div>' +
+'<div class="pv-row"><span class="k">類型</span><span class="pv-type"><button type="button" data-btype="0" class="' + (p.type===0? "sel-out": "") + '">支出</button><button type="button" data-btype="1" class="' + (p.type===1? "sel-in": "") + '">收入</button></span></div>' +
+pvRow("類別", p.category) +
+pvRow("金額", fmtMoney(Math.round(p.amount*100))) +
+pvRow("帳戶", p.acc || chat.acc) +
+pvRow("備註", p.note) +
+pvRow("日期", p.date) +
+'<div class="act"><button type="button" data-b="edit">修改</button><button type="button" class="pv-del" data-b="del">刪除呢筆</button></div>';
+} else {
+var cats = p.type===0? EXP_CATS: INC_CATS;
+var catOpts = cats.map(function(c){ return '<option value="' + esc(c) + '"' + (c===p.category? " selected": "") + ">" + esc(c) + "</option>"; }).join("");
+var accOpts = allAccountNames().map(function(a){ return '<option value="' + esc(a) + '"' + (a===(p.acc || chat.acc)? " selected": "") + ">" + esc(a) + "</option>"; }).join("");
+card.innerHTML = '<div class="pv-t">修改第 ' + (idx+1) + ' 筆</div>' +
+'<div class="pv-row"><span class="k">類別</span><select class="bCat">' + catOpts + '</select></div>' +
+'<div class="pv-row"><span class="k">金額（' + CUR.code + '）</span><input class="bAmt" type="number" min="0" step="0.01" value="' + p.amount + '" /></div>' +
+'<div class="pv-row"><span class="k">帳戶</span><select class="bAcc">' + accOpts + '</select></div>' +
+'<div class="pv-row"><span class="k">備註</span><input class="bNote" type="text" value="' + esc(p.note) + '" /></div>' +
+'<div class="pv-row"><span class="k">日期</span><input class="bDate" type="date" value="' + p.date + '" /></div>' +
+'<div class="act"><button type="button" class="primary" data-b="done">完成修改</button><button type="button" data-b="cancel">取消</button></div>';
+}
+card.querySelectorAll("[data-btype]").forEach(function(btn){
+btn.addEventListener("click", function(){
+var nt = parseInt(btn.getAttribute("data-btype"), 10);
+if(nt===p.type) return;
+p.type = nt;
+var allowed = nt===0? EXP_CATS: INC_CATS;
+if(allowed.indexOf(p.category)===-1) p.category = guessCat(p.note, nt);
+showBatchPreview();
+});
+});
+card.querySelectorAll("[data-b]").forEach(function(btn){
+btn.addEventListener("click", function(){
+var act = btn.getAttribute("data-b");
+if(act==="edit"){
+var wrap = card.parentNode;
+wrap.replaceChild(batchCard(p, idx, true), card);
+scrollChat();
+}
+else if(act==="done"){
+var amt = parseFloat(card.querySelector(".bAmt").value);
+if(!(amt>0)){ showToast("金額要大過 0"); return; }
+p.category = card.querySelector(".bCat").value;
+p.amount = amt;
+p.acc = card.querySelector(".bAcc").value;
+p.note = card.querySelector(".bNote").value.trim() || p.category;
+if(card.querySelector(".bDate").value) p.date = card.querySelector(".bDate").value;
+showBatchPreview();
+}
+else if(act==="cancel"){ showBatchPreview(); }
+else if(act==="del"){
+chat.batch.splice(idx, 1);
+if(chat.batch.length===0){
+chat.batch = null;
+var w0 = chatMsgs().querySelector(".pv-batch"); if(w0) w0.remove();
+botSay("好，嗰幾筆全部取消咗，冇入到數。可以再打過。");
+setTimeout(function(){ if($("chatOverlay").classList.contains("open")) askText(); }, 280);
+}
+else if(chat.batch.length===1){
+var only = chat.batch[0];
+chat.batch = null;
+chat.parsed = only;
+chat.type = only.type===1? 1: 0;
+chat.acc = only.acc || chat.acc;
+var w1 = chatMsgs().querySelector(".pv-batch"); if(w1) w1.remove();
+botSay("刪剩最後一筆，轉返單筆預覽俾你核對。");
+showPreview(false);
+}
+else showBatchPreview();
+}
+});
+});
+return card;
+}
+function showBatchPreview(){
+if(!chat.batch || !chat.batch.length) return;
+var oldB = chatMsgs().querySelector(".pv-batch");
+if(oldB) oldB.remove();
+var old = chatMsgs().querySelector(".pv-card");
+if(old) old.remove();
+var wrap = document.createElement("div");
+wrap.className = "pv-batch";
+chat.batch.forEach(function(p, idx){ wrap.appendChild(batchCard(p, idx, false)); });
+var out = 0, inc = 0;
+chat.batch.forEach(function(p){ if(p.type===1) inc += Math.round(p.amount*100); else out += Math.round(p.amount*100); });
+var foot = document.createElement("div");
+foot.className = "pv-foot";
+var fh = '<div class="pv-t">一次入 ' + chat.batch.length + ' 筆 — 核對清楚先好確認</div>';
+if(out>0) fh += pvRow("支出合計", fmtMoney(out));
+if(inc>0) fh += pvRow("收入合計", fmtMoney(inc));
+fh += '<div class="act"><button type="button" class="primary" data-ball="ok">確認儲存全部（' + chat.batch.length + ' 筆）</button><button type="button" data-ball="cancel">全部取消</button></div>';
+foot.innerHTML = fh;
+wrap.appendChild(foot);
+chatMsgs().appendChild(wrap); scrollChat();
+foot.querySelector('[data-ball="ok"]').addEventListener("click", function(){ confirmBatchSave(wrap); });
+foot.querySelector('[data-ball="cancel"]').addEventListener("click", function(){
+wrap.remove();
+chat.batch = null;
+botSay("好，全部取消咗，冇入到數。可以再打過。");
+setTimeout(function(){ if($("chatOverlay").classList.contains("open")) askText(); }, 280);
+});
+}
+function confirmBatchSave(wrap){
+var items = chat.batch;
+if(!items || !items.length) return;
+var now = new Date();
+var tstr = pad2(now.getHours()) + ":" + pad2(now.getMinutes()) + ":" + pad2(now.getSeconds());
+var lines = [];
+items.forEach(function(p){
+maxId++;
+records.push({ i: maxId, d: p.date + " " + tstr, c: p.category, a: Math.round(p.amount*100), t: p.type===1? 1: 0, acc: p.acc || chat.acc, n: p.note, to: "" });
+lines.push((p.type===1? "收入 ": "支出 ") + p.category + " " + fmtMoney(Math.round(p.amount*100)) + " · " + (p.acc || chat.acc) + " · " + p.note + " · " + p.date);
+});
+save(); refreshFilterOptions(); renderAll();
+wrap.remove();
+botSay("已儲存 " + items.length + " 筆：\n" + lines.join("\n"));
+var row = document.createElement("div");
+row.className = "chip-row";
+[["再入一筆", function(){ askText(); }], ["關閉", function(){ closeChat(); }]].forEach(function(pair){
+var b = document.createElement("button");
+b.type = "button"; b.textContent = pair[0];
+b.addEventListener("click", function(){ row.remove(); pair[1](); });
+row.appendChild(b);
+});
+chatMsgs().appendChild(row); scrollChat();
+chat.batch = null;
+}
 function onChatSend(){
 if(chat.busy) return;
 var inp = $("chatText");
 var text = inp.value.trim();
 if(!text) return;
 inp.value = "";
+inp.style.height = "auto";
 meSay(text);
 $("chatInputRow").style.display = "none";
 if(chat.awaitingAcc){
@@ -2420,7 +2585,9 @@ chat.awaitingAcc = false;
 if(addAccount(nm, "資產")){ refreshFilterOptions(); renderAll(); botSay("好，已新增帳戶「" + nm + "」（資產；想改做負債或者刪除，去錢包頁「管理帳戶」就得）。"); }
 else botSay("「" + nm + "」已經喺帳戶清單入面，我用返呢個。");
 chat.acc = nm;
-if(chat.parsed){ showPreview(false); } else { askText(); }
+if(chat.parsed){ showPreview(false); }
+else if(chat.batch){ chat.batch.forEach(function(it){ it.acc = chat.acc; }); showBatchPreview(); }
+else { askText(); }
 return;
 }
 var mNew = text.match(/^(新增帳戶|加帳戶|新增戶口|加戶口|新帳戶)[:：\s]+(.+)$/);
@@ -2431,18 +2598,36 @@ else botSay("「" + nm2 + "」已經有咗，唔使再加。");
 setTimeout(function(){ if($("chatOverlay").classList.contains("open")) askText(); }, 280);
 return;
 }
+var segs = splitEntries(text);
+if(segs.length>10){
+botSay("一次最多入 10 筆，我入咗頭 10 筆，淨返嗰啲麻煩你再打過。");
+segs = segs.slice(0, 10);
+}
+if(!segs.length) segs = [text];
 var thinking = botTyping();
 chat.busy = true;
-parseEntry(text).then(function(parsed){
+parseEntries(segs).then(function(results){
 chat.busy = false;
 dismissTyping(thinking, function(){
-if(!(parsed.amount>0)){
-botSay("我分辨唔到金額，麻煩喺句嘢入面加埋金額，例如「漢堡 50」。");
+var good = [], bad = [];
+results.forEach(function(r){
+if(r.parsed && r.parsed.amount>0){ r.parsed.type = r.parsed.type===1? 1: 0; r.parsed.acc = ""; good.push(r.parsed); }
+else bad.push(r.seg);
+});
+if(bad.length && good.length) botSay("有 " + bad.length + " 筆分辨唔到金額，冇入到：「" + bad.join("」、「") + "」。其餘照入，嗰幾筆你之後再補打啦。");
+if(!good.length){
+botSay("我分辨唔到金額，麻煩每一筆都加埋金額，例如「漢堡 50」。一次入幾筆就用「、」或者換行分開。");
 setTimeout(function(){ if($("chatOverlay").classList.contains("open")) askText(); }, 280);
 return;
 }
-chat.parsed = parsed;
-chat.type = parsed.type===1? 1: 0;
+if(good.length===1){
+chat.batch = null;
+chat.parsed = good[0];
+chat.type = good[0].type;
+} else {
+chat.parsed = null;
+chat.batch = good;
+}
 askAccountStep();
 });
 }).catch(function(){
@@ -2454,7 +2639,7 @@ setTimeout(function(){ if($("chatOverlay").classList.contains("open")) askText()
 });
 }
 function openChat(){
-chat.parsed = null; chat.busy = false; chat.awaitingAcc = false;
+chat.parsed = null; chat.batch = null; chat.busy = false; chat.awaitingAcc = false;
 chat.session = (chat.session || 0) + 1;
 var sess = chat.session;
 chatMsgs().innerHTML = "";
@@ -2462,7 +2647,7 @@ $("chatInputRow").style.display = "none";
 $("chatText").value = "";
 $("chatOverlay").removeAttribute("inert");
 $("chatOverlay").classList.add("open");
-setTimeout(function(){ if(sess===chat.session && $("chatOverlay").classList.contains("open")) botSay("你好！直接打一句說話入帳就得，我會自動分辨支出／收入同類別，再問你用邊個帳戶。入數之前一定會俾你核對。想加新帳戶，打「新增帳戶 中銀」就得。"); }, 140);
+setTimeout(function(){ if(sess===chat.session && $("chatOverlay").classList.contains("open")) botSay("你好！直接打一句說話入帳就得，我會自動分辨支出／收入同類別，再問你用邊個帳戶。入數之前一定會俾你核對。一次入幾筆都得：用「、」或者換行分開幾筆，我會逐張卡俾你核對，撳一次確認入晒。想加新帳戶，打「新增帳戶 中銀」就得。"); }, 140);
 setTimeout(function(){ if(sess===chat.session && $("chatOverlay").classList.contains("open")) askText(); }, 430);
 }
 function closeChat(){
@@ -2604,7 +2789,8 @@ if($("settingsFileInput")) $("settingsFileInput").addEventListener("change", fun
 if($("btnChatTop")) $("btnChatTop").addEventListener("click", openChat);
 if($("btnChatClose")) $("btnChatClose").addEventListener("click", closeChat);
 if($("btnChatSend")) $("btnChatSend").addEventListener("click", onChatSend);
-if($("chatText")) $("chatText").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); onChatSend(); } });
+if($("chatText")) $("chatText").addEventListener("keydown", function(e){ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); onChatSend(); } });
+if($("chatText")) $("chatText").addEventListener("input", function(){ this.style.height = "auto"; this.style.height = Math.min(this.scrollHeight, 118) + "px"; });
 renderFeatures();
 })();
 </script>
