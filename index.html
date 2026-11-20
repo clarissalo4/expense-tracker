@@ -712,10 +712,12 @@
               <button type="button" id="btnFxRefresh">重新攞匯率</button>
               <button type="button" id="btnFxSetBook">將「換成」嗰隻設為記帳貨幣</button>
             </div>
-            <p class="hint" style="margin-top:14px">匯率係即時由公開匯率服務攞嘅市場中間價，只供參考，同銀行／找換店嘅實際兌換價會有出入。換算只係俾你睇數字，唔會改動你任何紀錄嘅金額；想成個帳本轉用另一隻貨幣，用頂部嘅貨幣掣或者下面「將『換成』嗰隻設為記帳貨幣」。</p>
+            <p class="hint" style="margin-top:14px"><strong style="color:var(--ink)">匯率點嚟？</strong>主要來源係 ExchangeRate-API（open.er-api.com）提供嘅市場中間價 — 即係買入價同賣出價中間嘅參考價，唔係任何一間銀行嘅報價。如果主要來源攞唔到，會自動轉用後備來源 Frankfurter（frankfurter.app），佢用嘅係歐洲央行每日公佈嘅參考匯率。每次換算上面「匯率來源」嗰行會寫明今次實際用咗邊個來源同更新時間，以嗰行作準。</p>
+            <p class="hint" style="margin-top:8px">所以呢度嘅匯率只供參考：唔係銀行／找換店嘅買入價或賣出價，亦未計手續費同差價，實際兌換以銀行／找換店當時報價為準，金額大嘅時候出入可以幾明顯。換算只係俾你睇數字，唔會改動你任何紀錄嘅金額；想成個帳本轉用另一隻貨幣，用頂部嘅貨幣掣或者下面「將『換成』嗰隻設為記帳貨幣」。</p>
           </section>
       <section class="panel reveal" aria-label="換成其他貨幣一覽" style="margin-top:16px">
             <h2>換成其他貨幣一覽</h2>
+            <p class="hint" style="margin-bottom:10px">同上面用同一組匯率：主要係 ExchangeRate-API 市場中間價，攞唔到先轉用 Frankfurter／歐洲央行參考匯率；實際來源同更新時間睇上面「匯率來源」嗰行。</p>
             <div id="fxTable"><p class="hint">未載入匯率。</p></div>
           </section>
     </div>
@@ -3228,13 +3230,13 @@ initAi();
             .then(function(resp){ if(!resp.ok) throw new Error("http-" + resp.status); return resp.json(); })
             .then(function(j){
               if(!j || j.result!=="success" || !j.rates) throw new Error("bad-data");
-              return { rates:j.rates, when:(j.time_last_update_utc || ""), src:"ExchangeRate-API（open.er-api.com）" };
+              return { rates:j.rates, when:(j.time_last_update_utc || ""), src:"ExchangeRate-API（open.er-api.com）· 市場中間價" };
             });
           var fallback = fetch("https://api.frankfurter.app/latest?from=" + encodeURIComponent(base))
             .then(function(resp){ if(!resp.ok) throw new Error("http-" + resp.status); return resp.json(); })
             .then(function(j){
               if(!j || !j.rates) throw new Error("bad-data");
-              return { rates:j.rates, when:(j.date ? j.date + "（歐洲央行參考匯率日期）" : ""), src:"Frankfurter（frankfurter.app）" };
+              return { rates:j.rates, when:(j.date ? j.date + "（歐洲央行參考匯率日期）" : ""), src:"Frankfurter（frankfurter.app）· 歐洲央行參考匯率" };
             });
           return primary.catch(function(){ return fallback; })
             .then(function(d){ fxCache[base] = d; return d; });
