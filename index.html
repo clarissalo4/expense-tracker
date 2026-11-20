@@ -452,6 +452,28 @@
         .filter-row select{ flex:1 1 42%; width:auto; max-width:none; min-width:0; }
       }
     </style>
+
+    <style id="drop-style">
+      /* ===== 拖放上載 ===== */
+      .drop-zone{ margin-top:12px; border:1.5px dashed rgba(127,127,127,.5); border-radius:16px; padding:16px;
+        display:flex; align-items:center; gap:12px; cursor:pointer; color:var(--muted);
+        transition:border-color .2s ease, background .2s ease, color .2s ease; }
+      .drop-zone svg{ width:26px; height:26px; flex:none; }
+      .drop-zone .dz-t{ font-weight:600; color:var(--ink); font-size:14.5px; }
+      .drop-zone .dz-d{ font-size:12.5px; margin-top:1px; }
+      .drop-zone:hover{ border-color:var(--accent); color:var(--accent); }
+      .drop-zone:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+      .drop-zone.over{ border-color:var(--accent); background:rgba(0,113,227,.08); color:var(--accent); }
+      .drop-overlay{ position:fixed; inset:0; z-index:90; display:flex; align-items:center; justify-content:center; padding:22px;
+        background:rgba(0,0,0,.38); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+        opacity:0; visibility:hidden; transition:opacity .25s ease, visibility .25s ease; pointer-events:none; }
+      .drop-overlay.on{ opacity:1; visibility:visible; }
+      .drop-card{ background:var(--surface); border:2px dashed var(--accent); border-radius:26px; box-shadow:var(--shadow-lg);
+        padding:42px 32px; text-align:center; width:100%; max-width:430px; color:var(--ink); }
+      .drop-card svg{ width:46px; height:46px; color:var(--accent); }
+      .drop-card .dc-t{ font-size:22px; font-weight:700; letter-spacing:-.02em; margin-top:12px; }
+      .drop-card .dc-d{ color:var(--muted); font-size:14px; margin-top:6px; }
+    </style>
   </head>
   <body>
     <header class="topbar">
@@ -523,6 +545,10 @@
           <button type="button" id="btnImportSettings">匯入設定檔</button>
           <button type="button" id="btnExportSettings">匯出設定檔</button>
         </div>
+        <div class="drop-zone" id="dzSettings" role="button" tabindex="0" aria-label="拖放設定檔到這裏匯入，或按此選擇檔案">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <div><div class="dz-t">將設定檔拖入嚟</div><div class="dz-d">拖放 JSON 設定檔到呢度，或者撳呢度揀檔案，一次過套用期初調整、預算同定期項目</div></div>
+        </div>
         <div class="io-msg" id="settingsMsg" role="status"></div>
       </section>
     </div>
@@ -567,11 +593,15 @@
       <h2 class="view-title">更多</h2>
       <section class="panel reveal" aria-label="備份與還原">
             <h2>備份／換機</h2>
-            <p class="hint">資料只存喺呢部機嘅瀏覽器入面。換機或者去 GitHub Pages 用之前，先匯出 CSV，去到新機／新網址再匯入就得，唔使會員、唔使登入。匯入會自動跳過重複紀錄。</p>
+            <p class="hint">資料只存喺呢部機嘅瀏覽器入面。換機或者去 GitHub Pages 用之前，先匯出 CSV，去到新機／新網址再匯入就得，唔使會員、唔使登入。匯入會自動跳過重複紀錄。亦可以直接將 CSV 或者設定檔（JSON）拖入頁面任何位置，鬆手即刻匯入，唔使撳掣揀檔案。</p>
             <div class="data-btns">
               <button type="button" id="btnImport2">匯入 CSV</button>
               <button type="button" id="btnExport2">匯出 CSV（全部紀錄）</button>
               <button type="button" id="btnRestore">清除所有紀錄（回復空白）</button>
+            </div>
+            <div class="drop-zone" id="dzCsv" role="button" tabindex="0" aria-label="拖放 CSV 檔案到這裏匯入，或按此選擇檔案">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <div><div class="dz-t">將 CSV 拖入嚟</div><div class="dz-d">拖放 CSV 到呢度，或者撳呢度揀檔案；匯入會自動跳過重複紀錄</div></div>
             </div>
             <div class="io-msg" id="ioMsg" role="status"></div>
           </section>
@@ -2135,6 +2165,7 @@ var _renderAll = renderAll;
 renderAll = function(){ _renderAll(); renderFeatures(); };
 var _renderList = renderList;
 renderList = function(){ _renderList(); renderBudget(); renderBanner(); };
+window.handleSettingsFile = handleSettingsFile;
 if($("btnImportSettings")) $("btnImportSettings").addEventListener("click", function(){ $("settingsFileInput").click(); });
 if($("btnExportSettings")) $("btnExportSettings").addEventListener("click", exportSettings);
 if($("settingsFileInput")) $("settingsFileInput").addEventListener("change", function(){ handleSettingsFile(this.files[0]); this.value=""; });
@@ -2481,5 +2512,112 @@ $("btnCopySummary").addEventListener("click", copySummary);
 initAi();
 })();
 </script>
+
+    <div class="drop-overlay" id="dropOverlay" aria-hidden="true">
+      <div class="drop-card">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <div class="dc-t">鬆手就會匯入</div>
+        <div class="dc-d">CSV 會匯入做紀錄（自動跳過重複），JSON 設定檔會套用到錢包、預算同定期項目。</div>
+      </div>
+    </div>
+
+    <script>
+      /* ===== 拖放上載：成頁拖入 CSV／設定檔 ===== */
+      (function(){
+        "use strict";
+        function $(id){ return document.getElementById(id); }
+        var overlay = $("dropOverlay");
+        var dragDepth = 0;
+
+        function hasFiles(e){
+          var t = e.dataTransfer && e.dataTransfer.types;
+          if(!t) return false;
+          for(var i=0;i<t.length;i++){ if(t[i]==="Files") return true; }
+          return false;
+        }
+        function isSettingsFile(f){
+          var n = (f.name || "").toLowerCase();
+          return /\.json$/.test(n) || f.type === "application/json";
+        }
+        function isCsvFile(f){
+          var n = (f.name || "").toLowerCase();
+          return /\.(csv|txt)$/.test(n) || f.type === "text/csv" || f.type === "text/plain";
+        }
+        function toast(msg){ if(typeof showToast === "function") showToast(msg); }
+
+        /* want: "any" 成頁拖放 / "csv" 只收 CSV / "settings" 只收設定檔 */
+        function routeFiles(files, want){
+          var bad = [], wrongZone = false;
+          for(var i=0;i<files.length;i++){
+            var f = files[i];
+            if(isSettingsFile(f)){
+              if(want === "csv"){ wrongZone = true; continue; }
+              if(typeof window.handleSettingsFile === "function") window.handleSettingsFile(f);
+              else toast("設定檔匯入未就緒，請去錢包頁撳「匯入設定檔」。");
+            } else if(isCsvFile(f)){
+              if(want === "settings"){ wrongZone = true; continue; }
+              if(typeof handleFile === "function") handleFile(f);
+            } else {
+              bad.push(f.name || "檔案");
+            }
+          }
+          if(wrongZone){
+            toast(want === "settings"
+              ? "呢度只收 JSON 設定檔；CSV 紀錄檔拖入頁面任何位置就匯入到。"
+              : "呢度只收 CSV 紀錄檔；JSON 設定檔拖入頁面任何位置就匯入到。");
+          }
+          if(bad.length) toast("唔支援呢啲檔案（只接受 .csv 同 .json）：" + bad.join("、"));
+        }
+        function hideOverlay(){ dragDepth = 0; if(overlay) overlay.classList.remove("on"); }
+
+        window.addEventListener("dragenter", function(e){
+          if(!hasFiles(e)) return;
+          e.preventDefault();
+          dragDepth++;
+          if(overlay) overlay.classList.add("on");
+        });
+        window.addEventListener("dragover", function(e){
+          if(!hasFiles(e)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        });
+        window.addEventListener("dragleave", function(e){
+          if(!hasFiles(e)) return;
+          dragDepth--;
+          if(dragDepth <= 0) hideOverlay();
+        });
+        window.addEventListener("drop", function(e){
+          if(!(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length)) return;
+          e.preventDefault();
+          hideOverlay();
+          if(e.target && e.target.closest && e.target.closest(".drop-zone")) return; /* 拖放框自己處理 */
+          routeFiles(e.dataTransfer.files, "any");
+        });
+
+        function wireZone(id, want, inputId){
+          var z = $(id); if(!z) return;
+          function openPicker(){ var inp = $(inputId); if(inp) inp.click(); }
+          z.addEventListener("click", openPicker);
+          z.addEventListener("keydown", function(e){
+            if(e.key === "Enter" || e.key === " "){ e.preventDefault(); openPicker(); }
+          });
+          z.addEventListener("dragenter", function(e){ if(hasFiles(e)){ e.preventDefault(); z.classList.add("over"); } });
+          z.addEventListener("dragover", function(e){
+            if(!hasFiles(e)) return;
+            e.preventDefault(); e.dataTransfer.dropEffect = "copy"; z.classList.add("over");
+          });
+          z.addEventListener("dragleave", function(){ z.classList.remove("over"); });
+          z.addEventListener("drop", function(e){
+            if(!hasFiles(e)) return;
+            e.preventDefault(); e.stopPropagation();
+            z.classList.remove("over");
+            hideOverlay();
+            routeFiles(e.dataTransfer.files, want);
+          });
+        }
+        wireZone("dzCsv", "csv", "fileInput");
+        wireZone("dzSettings", "settings", "settingsFileInput");
+      })();
+    </script>
   </body>
 </html>
