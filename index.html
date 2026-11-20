@@ -474,6 +474,16 @@
       .drop-card .dc-t{ font-size:22px; font-weight:700; letter-spacing:-.02em; margin-top:12px; }
       .drop-card .dc-d{ color:var(--muted); font-size:14px; margin-top:6px; }
     </style>
+
+    <style id="acc-style">
+      /* ===== 管理帳戶 ===== */
+      .acc-form{ display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+      .acc-form input{ flex:1 1 170px; min-width:0; border-radius:14px; background:var(--surface2); border-color:transparent; padding:9px 13px; }
+      .acc-form input:focus{ background:var(--surface); }
+      .acc-form select{ flex:0 1 auto; border-radius:14px; background:var(--surface2); border-color:transparent; padding:9px 13px; }
+      .acc-form .primary{ padding:9px 22px; }
+      @media (max-width:640px){ .acc-form select{ flex:1 1 100%; } .acc-form .primary{ flex:1 1 100%; } }
+    </style>
   </head>
   <body>
     <header class="topbar">
@@ -537,6 +547,19 @@
       </section>
       <div id="walletHost"></div>
       <p class="hint wallet-hint">結餘由你自己嘅紀錄推算，再加下面你設定嘅期初調整；新增、修改或刪除紀錄，結餘會即時跟住調整。</p>
+      <section class="panel reveal" aria-label="管理帳戶" style="margin-top:16px">
+        <h2>管理帳戶</h2>
+        <p class="hint">呢度唔會預設任何帳戶：你用開邊啲銀行、現金、信用卡，就自己加返，唔啱用嘅隨時刪除。新增同刪除都只存喺呢部機。刪除帳戶唔會刪走紀錄；如果有紀錄用緊嗰個帳戶，刪除前會話你知有幾筆，刪咗之後啲紀錄會保留個帳戶名，但唔再計入錢包結餘。另外，開 AI 入帳打「新增帳戶 中銀」都可以直接加帳戶。</p>
+        <div id="accListHost"></div>
+        <div class="acc-form">
+          <input type="text" id="accName" placeholder="帳戶名稱，例如：中銀、現金、八達通" aria-label="新帳戶名稱" />
+          <select id="accKind" aria-label="帳戶類型">
+            <option value="資產">資產（銀行／現金／儲蓄）</option>
+            <option value="負債">負債（信用卡／借貸）</option>
+          </select>
+          <button type="button" class="primary" id="btnAccAdd">新增帳戶</button>
+        </div>
+      </section>
       <section class="panel reveal" aria-label="期初結餘調整" style="margin-top:16px">
         <h2>期初結餘調整</h2>
         <p class="hint">開始記帳之前，某個帳戶已經有錢（或者信用卡已有欠款），就喺度填返個期初數：資產填正數、欠款填負數（例如 −1000），錢包結餘會加埋一齊計。呢啲數字只存喺呢部機嘅瀏覽器，唔會寫入網站檔案、唔會上載去 GitHub；其他人喺自己部機開呢個網站，見到嘅只會係佢自己填嘅數，預設全部係 0。唔想逐個打，可以撳下面「匯入設定檔」，一次過入返成組期初調整，連每月預算同定期項目都一齊還原；設定檔唔包含紀錄同 API Key，只存喺你自己部機，唔好上載去 GitHub。</p>
@@ -653,7 +676,7 @@
           <h2 id="chatTitle">同 Gemini 講入帳</h2>
           <button type="button" id="btnChatClose">關閉</button>
         </div>
-        <p class="hint" style="margin-bottom:10px">直接打一句說話（例如「漢堡 50」或者「出糧 5000」），AI 會自動分辨支出／收入、金額、類別同備註，然後再問你用邊個帳戶。入數之前一定會俾你核對預覽，類型分辨錯可以喺預覽即刻改返；你撳「確認儲存」先會入帳。未設定 Gemini Key 或者連唔到嗰陣，會自動改用本地關鍵字分辨，流程一樣。</p>
+        <p class="hint" style="margin-bottom:10px">直接打一句說話（例如「漢堡 50」或者「出糧 5000」），AI 會自動分辨支出／收入、金額、類別同備註，然後再問你用邊個帳戶。入數之前一定會俾你核對預覽，類型分辨錯可以喺預覽即刻改返；你撳「確認儲存」先會入帳。想加新帳戶，直接打「新增帳戶 中銀」就得，唔使離開呢度。未設定 Gemini Key 或者連唔到嗰陣，會自動改用本地關鍵字分辨，流程一樣。</p>
         <div class="chat-msgs" id="chatMsgs"></div>
         <div class="chat-input-row" id="chatInputRow" style="display:none">
           <input type="text" id="chatText" placeholder="例如：漢堡 50、搭車 100、lunch 68" autocomplete="off" />
@@ -724,7 +747,46 @@
       "use strict";
       /* ================= 基本設定 ================= */
       var LS_KEY = "jizhang.records.v1";
-      var ACCOUNTS = ["HSBC(savings)", "MOX", "MOX credit", "Citi", "恆生", "MOX分期", "HSBC 定期"];
+      /* ===== 帳戶：唔預設任何帳戶，全部由用家自己新增／刪除，只存本機 localStorage（jizhang.accounts.v1）。
+         第一次開而本機已經有紀錄或期初調整，就由嗰啲資料自動還原返帳戶清單，唔會唔見咗舊帳戶；
+         全新用家就係空白，自己加返用開嘅銀行／現金／信用卡。 ===== */
+      var ACC_LS = "jizhang.accounts.v1";
+      var ACC_KIND_GUESS = { "MOX分期":"負債", "MOX credit":"負債" };
+      function deriveAccountObjs(){
+        var names = [], kinds = {};
+        function push(n){
+          n = String(n == null ? "" : n).trim();
+          if(n && names.indexOf(n) === -1){ names.push(n); kinds[n] = ACC_KIND_GUESS[n] || "資產"; }
+        }
+        try{
+          var recs = JSON.parse(localStorage.getItem(LS_KEY) || "[]");
+          if(Object.prototype.toString.call(recs) === "[object Array]") recs.forEach(function(r){ if(r){ push(r.acc); push(r.to); } });
+        }catch(e){}
+        try{
+          var adj0 = JSON.parse(localStorage.getItem("jizhang.walletAdj.v1") || "{}");
+          if(adj0 && typeof adj0 === "object") Object.keys(adj0).forEach(push);
+        }catch(e){}
+        return names.map(function(n){ return { name:n, kind:kinds[n] }; });
+      }
+      function loadAccountObjs(){
+        try{
+          var a = JSON.parse(localStorage.getItem(ACC_LS) || "null");
+          if(Object.prototype.toString.call(a) === "[object Array]"){
+            var out = [];
+            a.forEach(function(o){
+              if(o && typeof o.name === "string" && o.name.trim() && !out.some(function(x){ return x.name === o.name.trim(); }))
+                out.push({ name:o.name.trim(), kind: o.kind === "負債" ? "負債" : "資產" });
+            });
+            return out;
+          }
+        }catch(e){}
+        return deriveAccountObjs();
+      }
+      var ACC_OBJS = loadAccountObjs();
+      var ACCOUNTS = ACC_OBJS.map(function(o){ return o.name; });
+      var ACC_KINDS = {};
+      ACC_OBJS.forEach(function(o){ ACC_KINDS[o.name] = o.kind; });
+      var armedAccDel = null, armedAccDelTimer = null;
       var TYPES = ["支出", "收入", "轉帳"];
       var EXP_CATS = ["飲食","交通","日常","通信","娛樂","服飾","醫療","美容","旅遊","教育","社交","禮物","居住","稅項","定期"];
       var INC_CATS = ["工資","獎金","收錢","入錢","零用","兼職"];
@@ -733,11 +795,56 @@
       /* 錢包分組（跟舊 App 結構）。結餘 = 紀錄推算 + 期初調整；
          期初調整只存用家本機 localStorage，唔寫入呢個檔案，
          所以檔案上載去 GitHub 都唔會帶埋任何人嘅結餘數字。 */
-      var WALLET_GROUPS = [
-        { name:"借入", kind:"負債", accounts:["MOX分期"] },
-        { name:"信用卡", kind:"負債", accounts:["MOX credit"] },
-        { name:"金融卡", kind:"資產", accounts:["MOX","恆生","HSBC(savings)","Citi","HSBC 定期"] }
-      ];
+      var WALLET_GROUPS = [];
+      function syncWalletGroups(){
+        var assets = [], liabs = [], known = {};
+        ACC_OBJS.forEach(function(o){ known[o.name] = 1; (o.kind === "負債" ? liabs : assets).push(o.name); });
+        var orphans = [];
+        if(typeof records !== "undefined" && records){
+          records.forEach(function(r){
+            [r.acc, r.to].forEach(function(n){
+              if(n && !known[n] && orphans.indexOf(n) === -1) orphans.push(n);
+            });
+          });
+        }
+        WALLET_GROUPS = [];
+        if(assets.length) WALLET_GROUPS.push({ name:"資產帳戶", kind:"資產", accounts:assets });
+        if(liabs.length) WALLET_GROUPS.push({ name:"負債帳戶", kind:"負債", accounts:liabs });
+        if(orphans.length) WALLET_GROUPS.push({ name:"其他帳戶（未加入管理）", kind:"資產", accounts:orphans });
+      }
+      function saveAccounts(){
+        ACCOUNTS = ACC_OBJS.map(function(o){ return o.name; });
+        ACC_KINDS = {};
+        ACC_OBJS.forEach(function(o){ ACC_KINDS[o.name] = o.kind; });
+        try{ localStorage.setItem(ACC_LS, JSON.stringify(ACC_OBJS)); }catch(e){}
+        syncWalletGroups();
+      }
+      function addAccount(name, kind){
+        name = String(name == null ? "" : name).trim();
+        if(!name) return false;
+        for(var i = 0; i < ACC_OBJS.length; i++){ if(ACC_OBJS[i].name === name) return false; }
+        ACC_OBJS.push({ name:name, kind: kind === "負債" ? "負債" : "資產" });
+        saveAccounts();
+        return true;
+      }
+      function removeAccount(name){
+        ACC_OBJS = ACC_OBJS.filter(function(o){ return o.name !== name; });
+        var adj = loadWalletAdj();
+        if(adj[name] != null){ delete adj[name]; saveWalletAdj(adj); }
+        if(armedAccDel === name) armedAccDel = null;
+        saveAccounts();
+        refreshFilterOptions();
+        renderAll();
+        showToast("已刪除帳戶：" + name);
+      }
+      function allAccountNames(){
+        var list = ACCOUNTS.slice();
+        records.forEach(function(r){
+          if(r.acc && list.indexOf(r.acc) === -1) list.push(r.acc);
+          if(r.to && list.indexOf(r.to) === -1) list.push(r.to);
+        });
+        return list;
+      }
       var WALLET_ADJ_LS = "jizhang.walletAdj.v1";
       function loadWalletAdj(){
         try{ var a = JSON.parse(localStorage.getItem(WALLET_ADJ_LS) || "null"); if(a && typeof a==="object") return a; }catch(e){}
@@ -998,6 +1105,10 @@
       function renderWalletAdj(){
         var host = $("walletAdjHost"); if(!host) return;
         var adj = loadWalletAdj();
+        if(!ACCOUNTS.length){
+          host.innerHTML = '<p class="hint">未有帳戶，喺上面「管理帳戶」加咗帳戶先可以設定期初調整。</p>';
+          return;
+        }
         var html = "";
         ACCOUNTS.forEach(function(name){
           var v = typeof adj[name]==="number" ? String(adj[name]/100) : "";
@@ -1025,9 +1136,42 @@
           })(inputs[i]);
         }
       }
+      function renderAccManager(){
+        var host = $("accListHost"); if(!host) return;
+        if(!ACC_OBJS.length){
+          host.innerHTML = '<p class="hint" style="margin-bottom:4px">暫時未有帳戶。用下面表格加你第一個帳戶，或者開 AI 入帳打「新增帳戶 中銀」。</p>';
+          return;
+        }
+        var map = accountBalances();
+        var html = "";
+        ACC_OBJS.forEach(function(o){
+          var n = map[o.name] ? map[o.name].n : 0;
+          var bal = walletBalance(o.name, map);
+          var armed = armedAccDel === o.name;
+          html += '<div class="recur-item"><div class="ri-main"><div class="ri-name">' + esc(o.name) + '</div>' +
+            '<div class="ri-meta">' + esc(o.kind) + " · " + n + " 筆紀錄" + (n && armed ? " · 刪除後紀錄會保留呢個帳戶名，但唔再計入錢包結餘" : "") + '</div></div>' +
+            '<span class="ri-amt">' + (bal < 0 ? "−" : "") + fmtMoney(bal) + "</span>" +
+            '<button type="button" class="' + (armed ? "danger" : "") + '" data-accdel="' + esc(o.name) + '">' + (armed ? "確認刪除？" : "刪除") + "</button></div>";
+        });
+        host.innerHTML = html;
+        var btns = host.querySelectorAll("[data-accdel]");
+        for(var i = 0; i < btns.length; i++){
+          (function(btn){
+            btn.addEventListener("click", function(){
+              var name = btn.getAttribute("data-accdel");
+              if(armedAccDel === name){ removeAccount(name); return; }
+              armedAccDel = name;
+              if(armedAccDelTimer) clearTimeout(armedAccDelTimer);
+              armedAccDelTimer = setTimeout(function(){ armedAccDel = null; renderAccManager(); }, 4000);
+              renderAccManager();
+            });
+          })(btns[i]);
+        }
+      }
       function renderWallet(){
         var host = $("walletHost");
         if(!host) return;
+        syncWalletGroups();
         var map = accountBalances();
         var totalAssets = 0, totalLiab = 0, out = "";
         WALLET_GROUPS.forEach(function(g, gi){
@@ -1045,6 +1189,9 @@
           });
           out += "</section>";
         });
+        if(!WALLET_GROUPS.length){
+          out = '<section class="panel" style="box-shadow:none;border:1px dashed var(--line);margin-bottom:14px"><p class="hint" style="font-size:14px">未有任何帳戶。喺下面「管理帳戶」加返你自己用開嘅銀行、現金或者信用卡，呢度就會顯示返各自嘅結餘。</p></section>';
+        }
         host.innerHTML = out;
         var net = totalAssets - totalLiab;
         var nw = $("netWorth");
@@ -1052,6 +1199,7 @@
         var sub = $("netWorthSub");
         if(sub) sub.textContent = "資產 " + fmtMoney(totalAssets) + " · 負債 " + fmtMoney(totalLiab);
         renderWalletAdj();
+        renderAccManager();
       }
       function renderAll(){ renderHeader(); renderSummary(); renderList(); renderBreakdown(); renderTrend(); renderWallet(); }
 
@@ -1071,9 +1219,12 @@
 
       /* ================= 新增 / 編輯表格 ================= */
       function fillAccountSelects(){
-        var opts = ACCOUNTS.map(function(a){ return '<option value="' + esc(a) + '">' + esc(a) + "</option>"; }).join("");
+        var names = allAccountNames();
+        var opts = names.length
+          ? names.map(function(a){ return '<option value="' + esc(a) + '">' + esc(a) + "</option>"; }).join("")
+          : '<option value="">（未有帳戶，去錢包頁新增）</option>';
         $("inAcc").innerHTML = opts;
-        $("inTo").innerHTML = '<option value="">（未指定）</option>' + opts;
+        $("inTo").innerHTML = '<option value="">（未指定）</option>' + (names.length ? opts : "");
       }
       function fillCatSelect(){
         var list = formType===1 ? INC_CATS : EXP_CATS;
@@ -1146,6 +1297,7 @@
           }
         }
         var acc = $("inAcc").value;
+        if(!acc){ $("formErr").textContent = "未有帳戶可用：請先去「錢包」頁新增帳戶，或者用 AI 入帳打「新增帳戶 名稱」。"; return; }
         var to = formType===2 ? $("inTo").value : "";
         if(formType===2 && to && to===acc){ $("formErr").textContent = "轉出同轉入帳戶唔可以相同。"; return; }
         var cents = Math.round(amt*100);
@@ -1256,7 +1408,7 @@
           if(rec.acc && ACCOUNTS.indexOf(rec.acc)===-1) newAccs[rec.acc]=1;
           if(rec.to && ACCOUNTS.indexOf(rec.to)===-1) newAccs[rec.to]=1;
         }
-        Object.keys(newAccs).forEach(function(a){ ACCOUNTS.push(a); });
+        Object.keys(newAccs).forEach(function(a){ addAccount(a, "資產"); });
         return { added:added, dup:dup, bad:bad };
       }
       function showIoMsg(txt, ok){
@@ -1325,6 +1477,17 @@
         $("fileInput").addEventListener("change", function(){ handleFile(this.files[0]); this.value=""; });
         $("btnExportTop").addEventListener("click", exportCSV);
         $("btnExport2").addEventListener("click", exportCSV);
+        var accAddBtn = $("btnAccAdd");
+        if(accAddBtn) accAddBtn.addEventListener("click", function(){
+          var name = $("accName").value.trim();
+          if(!name){ showToast("請輸入帳戶名稱"); return; }
+          if(!addAccount(name, $("accKind").value)){ showToast("已經有「" + name + "」呢個帳戶"); return; }
+          $("accName").value = "";
+          refreshFilterOptions(); renderAll();
+          showToast("已新增帳戶：" + name);
+        });
+        var accNameInp = $("accName");
+        if(accNameInp) accNameInp.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); if(accAddBtn) accAddBtn.click(); } });
         $("btnRestore").addEventListener("click", function(){
           if(!armedRestore){
             armedRestore = true;
@@ -1346,6 +1509,7 @@
 
       /* ================= 初始化 ================= */
       load();
+      syncWalletGroups();
       (function initMonth(){
         var cur = todayStr().slice(0,7);
         var has = records.some(function(r){ return monthOf(r.d)===cur; });
@@ -1531,7 +1695,7 @@ showToast("預算已更新");
 
 /* ================= 定期支出 ================= */
 var RECUR_LS = "jizhang.recurring.v1", SUG_LS = "jizhang.recurSug.v1";
-var CHAT_ACCOUNTS = ["HSBC(savings)","MOX","MOX credit","恆生","Citi","HSBC 定期"];
+/* 帳戶清單唔再寫死：用主程式嘅 allAccountNames()（用家自己管理嘅帳戶＋紀錄入面出現過嘅帳戶） */
 function loadRecur(){
 try{ var a = JSON.parse(localStorage.getItem(RECUR_LS) || "[]"); if(Object.prototype.toString.call(a)==="[object Array]") return a; }catch(e){}
 return [];
@@ -1586,7 +1750,7 @@ function buildRecurForm(){
 var wrap = $("recurFormWrap"); if(!wrap || wrap.getAttribute("data-built")) return;
 wrap.setAttribute("data-built","1");
 var catOpts = EXP_CATS.map(function(c){ return '<option value="' + esc(c) + '">' + esc(c) + "</option>"; }).join("");
-var accOpts = ACCOUNTS.map(function(a){ return '<option value="' + esc(a) + '">' + esc(a) + "</option>"; }).join("");
+var accOpts = allAccountNames().map(function(a){ return '<option value="' + esc(a) + '">' + esc(a) + "</option>"; }).join("");
 wrap.innerHTML = '<div class="recur-form">' +
 '<div class="full"><label class="fl" for="rcName">名稱</label><input id="rcName" type="text" placeholder="例如：八達通自動增值" /></div>' +
 '<div><label class="fl" for="rcAmt">金額（HKD）</label><input id="rcAmt" type="number" min="0" step="0.01" placeholder="100" /></div>' +
@@ -1619,6 +1783,12 @@ if(!host.getAttribute("data-built")){
 host.setAttribute("data-built","1");
 host.innerHTML = '<div id="recurSug"></div><div id="recurList"></div><div id="recurFormWrap"></div>';
 buildRecurForm();
+}
+var rcAccEl = $("rcAcc");
+if(rcAccEl){
+var rcCur = rcAccEl.value;
+rcAccEl.innerHTML = allAccountNames().map(function(a){ return '<option value="' + esc(a) + '">' + esc(a) + "</option>"; }).join("");
+if(rcCur && allAccountNames().indexOf(rcCur)>-1) rcAccEl.value = rcCur;
 }
 var items = loadRecur();
 /* 建議：即時由目前用家自己嘅紀錄偵測最常重複出現嘅同類、同額、同帳戶支出（出現 12 次或以上先建議）；
@@ -1761,7 +1931,7 @@ host.innerHTML = html;
 
 /* ================= AI 入帳 chatbox ================= */
 var GEMINI_KEY_LS = "jizhang.geminiKey.v1";
-var chat = { type: 0, acc: "HSBC(savings)", parsed: null, busy: false };
+var chat = { type: 0, acc: "", parsed: null, busy: false, awaitingAcc: false };
 function chatMsgs(){ return $("chatMsgs"); }
 function scrollChat(){
 var m = chatMsgs(); if(!m) return;
@@ -1816,14 +1986,40 @@ setTimeout(function(){ $("chatText").focus(); }, 320);
 }
 function askAccountStep(){
 var p = chat.parsed;
+var list = allAccountNames();
+if(!list.length){
+chat.awaitingAcc = true;
+botSay("你未有任何帳戶。打個帳戶名俾我（例如「中銀」或者「現金」），我即刻幫你新增，再用佢嚟入呢筆帳。");
+$("chatInputRow").style.display = "";
+setTimeout(function(){ $("chatText").focus(); }, 320);
+return;
+}
+if(!chat.acc || list.indexOf(chat.acc)===-1){
+chat.acc = "";
+for(var i=records.length-1;i>=0;i--){ if(records[i].acc && list.indexOf(records[i].acc)>-1){ chat.acc = records[i].acc; break; } }
+if(!chat.acc) chat.acc = list[0];
+}
 var sum = (chat.type===0? "支出": "收入") + " · " + p.category + " · " + fmtMoney(Math.round(p.amount*100));
 if(p.note && p.note!==p.category) sum += " · " + p.note;
 botSay("分辨到：" + sum + "。呢筆用邊個帳戶？");
-var defIdx = CHAT_ACCOUNTS.indexOf(chat.acc); if(defIdx<0) defIdx = 0;
-chipRow(CHAT_ACCOUNTS, function(idx, lb){
+var defIdx = list.indexOf(chat.acc); if(defIdx<0) defIdx = 0;
+chipRow(list, function(idx, lb){
 chat.acc = lb; meSay(lb);
 setTimeout(function(){ if($("chatOverlay").classList.contains("open")) showPreview(false); }, 240);
 }, defIdx);
+var row = document.createElement("div");
+row.className = "chip-row";
+var nb = document.createElement("button");
+nb.type = "button"; nb.textContent = "＋ 新增帳戶";
+nb.addEventListener("click", function(){
+row.classList.add("used"); nb.disabled = true;
+chat.awaitingAcc = true;
+botSay("好，打新帳戶個名俾我，例如「中銀」。");
+$("chatInputRow").style.display = "";
+setTimeout(function(){ $("chatText").focus(); }, 320);
+});
+row.appendChild(nb);
+chatMsgs().appendChild(row); scrollChat();
 }
 var KW_EXP = [
 ["醫療", ["睇醫生","醫生","藥房","診所","牙醫","眼科","醫院","藥"]],
@@ -1945,7 +2141,7 @@ pvRow("日期", p.date) +
 } else {
 var cats = chat.type===0? EXP_CATS: INC_CATS;
 var catOpts = cats.map(function(c){ return '<option value="' + esc(c) + '"' + (c===p.category? " selected": "") + ">" + esc(c) + "</option>"; }).join("");
-var accOpts = CHAT_ACCOUNTS.map(function(a){ return '<option value="' + esc(a) + '"' + (a===chat.acc? " selected": "") + ">" + esc(a) + "</option>"; }).join("");
+var accOpts = allAccountNames().map(function(a){ return '<option value="' + esc(a) + '"' + (a===chat.acc? " selected": "") + ">" + esc(a) + "</option>"; }).join("");
 card.innerHTML = '<div class="pv-t">修改預覽</div>' +
 '<div class="pv-row"><span class="k">類別</span><select id="pvCat">' + catOpts + '</select></div>' +
 '<div class="pv-row"><span class="k">金額（HKD）</span><input id="pvAmt" type="number" min="0" step="0.01" value="' + p.amount + '" /></div>' +
@@ -2017,6 +2213,24 @@ if(!text) return;
 inp.value = "";
 meSay(text);
 $("chatInputRow").style.display = "none";
+if(chat.awaitingAcc){
+var nm = text.replace(/^(新增帳戶|加帳戶|新增戶口|加戶口|新帳戶)[:：\s]*/, "").trim();
+if(!nm){ botSay("打個帳戶名俾我先得，例如「中銀」。"); $("chatInputRow").style.display = ""; return; }
+chat.awaitingAcc = false;
+if(addAccount(nm, "資產")){ refreshFilterOptions(); renderAll(); botSay("好，已新增帳戶「" + nm + "」（資產；想改做負債或者刪除，去錢包頁「管理帳戶」就得）。"); }
+else botSay("「" + nm + "」已經喺帳戶清單入面，我用返呢個。");
+chat.acc = nm;
+if(chat.parsed){ showPreview(false); } else { askText(); }
+return;
+}
+var mNew = text.match(/^(新增帳戶|加帳戶|新增戶口|加戶口|新帳戶)[:：\s]+(.+)$/);
+if(mNew){
+var nm2 = mNew[2].trim();
+if(addAccount(nm2, "資產")){ refreshFilterOptions(); renderAll(); botSay("好，已新增帳戶「" + nm2 + "」（資產）。之後入帳揀帳戶嗰陣就會見到佢；想改類型或者刪除，去錢包頁「管理帳戶」。"); }
+else botSay("「" + nm2 + "」已經有咗，唔使再加。");
+setTimeout(function(){ if($("chatOverlay").classList.contains("open")) askText(); }, 280);
+return;
+}
 var thinking = botTyping();
 chat.busy = true;
 parseEntry(text).then(function(parsed){
@@ -2040,7 +2254,7 @@ setTimeout(function(){ if($("chatOverlay").classList.contains("open")) askText()
 });
 }
 function openChat(){
-chat.parsed = null; chat.busy = false;
+chat.parsed = null; chat.busy = false; chat.awaitingAcc = false;
 chat.session = (chat.session || 0) + 1;
 var sess = chat.session;
 chatMsgs().innerHTML = "";
@@ -2048,7 +2262,7 @@ $("chatInputRow").style.display = "none";
 $("chatText").value = "";
 $("chatOverlay").removeAttribute("inert");
 $("chatOverlay").classList.add("open");
-setTimeout(function(){ if(sess===chat.session && $("chatOverlay").classList.contains("open")) botSay("你好！直接打一句說話入帳就得，我會自動分辨支出／收入同類別，再問你用邊個帳戶。入數之前一定會俾你核對。"); }, 140);
+setTimeout(function(){ if(sess===chat.session && $("chatOverlay").classList.contains("open")) botSay("你好！直接打一句說話入帳就得，我會自動分辨支出／收入同類別，再問你用邊個帳戶。入數之前一定會俾你核對。想加新帳戶，打「新增帳戶 中銀」就得。"); }, 140);
 setTimeout(function(){ if(sess===chat.session && $("chatOverlay").classList.contains("open")) askText(); }, 430);
 }
 function closeChat(){
@@ -2074,6 +2288,7 @@ app: "記帳本",
 kind: "jizhang-settings",
 version: 1,
 exportedAt: todayStr(),
+accounts: ACC_OBJS.map(function(o){ return { name: o.name, kind: o.kind }; }),
 walletAdj: adj,
 budgets: { cats: b.cats, total: b.total, travel: b.travel },
 recurring: loadRecur()
@@ -2094,13 +2309,26 @@ function applySettings(obj){
 if(!obj || typeof obj!=="object") return { err: "設定檔格式唔啱，唔係 JSON 物件。" };
 if(obj.kind && obj.kind!=="jizhang-settings") return { err: "呢個唔係記帳本嘅設定檔（kind 唔符）。" };
 var parts = [];
+if(Object.prototype.toString.call(obj.accounts)==="[object Array]"){
+var objs = [], seenA = {};
+obj.accounts.forEach(function(o){
+if(!o || typeof o.name!=="string") return;
+var nmA = o.name.trim();
+if(!nmA || seenA[nmA]) return;
+seenA[nmA] = 1;
+objs.push({ name: nmA, kind: o.kind==="負債"? "負債": "資產" });
+});
+ACC_OBJS = objs;
+saveAccounts();
+parts.push("帳戶 " + objs.length + " 個");
+}
 if(obj.walletAdj && typeof obj.walletAdj==="object"){
 var adj = {}, cnt = 0;
 Object.keys(obj.walletAdj).forEach(function(name){
 var v = obj.walletAdj[name];
 if(typeof v!=="number" || !isFinite(v)) return;
 var cents = Math.round(v*100);
-if(ACCOUNTS.indexOf(name)===-1) ACCOUNTS.push(name);
+addAccount(name, "資產");
 if(cents!==0){ adj[name] = cents; }
 cnt++;
 });
@@ -2365,7 +2593,7 @@ var n = String(a.note||"").slice(0,200);
 return { type:a.type, recordId:id, note:n};
 }
 if(a.type==="update_account"){
-if(ACCOUNTS.indexOf(a.account)===-1) return null;
+if(allAccountNames().indexOf(a.account)===-1) return null;
 return { type:a.type, recordId:id, account:a.account};
 }
 return null;
