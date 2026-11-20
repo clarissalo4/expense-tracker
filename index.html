@@ -236,7 +236,7 @@
       }
       @media (max-width:640px){
         .summary{ grid-template-columns:1fr 1fr; gap:10px; }
-        .summary .stat{ min-width:0; padding:16px 15px; border-radius:18px; }
+        .summary .stat{ min-width:0; padding:13px 15px; border-radius:18px; }
         .stat .v{ font-size:18.5px; }
         .wrap{ padding:6px 14px 70px; }
         .nav-in{ padding:9px 14px; }
@@ -456,8 +456,9 @@
       .stat .v{ font-size:clamp(18px, 2.1vw, 25px); }
       @media (max-width:640px){
         .wrap{ padding-bottom:124px; }
-        .hero{ padding-top:30px; }
-        .summary{ margin-top:22px; }
+        .hero{ padding-top:16px; }
+        .hero-sub{ margin-top:10px; }
+        .summary{ margin-top:12px; }
         .filter-row{ flex-direction:row; flex-wrap:wrap; }
         .filter-row .search{ flex:1 1 100%; width:100%; }
         .filter-row select{ flex:1 1 0; width:auto; max-width:none; min-width:0; }
@@ -556,6 +557,15 @@
       .fx-trow .trate{ color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
       @media (max-width:640px){ .fx-grid{ gap:8px; } .fx-swap{ width:38px; height:38px; } }
     </style>
+    <style id="period-style">
+      /* ===== 檢視期間：週／月／季／年 ===== */
+      .period-seg{ display:flex; gap:3px; background:var(--surface); box-shadow:var(--shadow); border-radius:980px; padding:3px; }
+      .period-seg button{ flex:1; padding:7px 0; font-weight:600; background:transparent; border-radius:980px; font-size:14.5px; color:var(--muted); }
+      .period-seg button.on{ background:var(--surface2); color:var(--ink); box-shadow:inset 0 0 0 1px var(--line), 0 2px 8px rgba(0,0,0,.08); }
+      /* 週模式嗰陣選擇器轉做 date，同 month 選擇器同款 */
+      .month-row input[type="date"]{ padding:6px 12px; background:var(--surface); box-shadow:var(--shadow); border-color:transparent; font-size:13.5px; }
+      @media (max-width:640px){ .month-row input[type="date"]{ min-width:0; flex:1; } .period-seg button{ padding:5px 0; } }
+    </style>
     <style id="batch-style">
       /* ===== AI 入帳：一次入幾筆 ===== */
       .chat-input-row textarea{ flex:1; min-width:0; border-radius:14px; background:var(--surface2); border-color:transparent;
@@ -593,15 +603,21 @@
         <p class="hero-sub" id="dataRange">載入中…</p>
       </section>
 
-      <section class="summary reveal" aria-label="本月概覽">
+      <section class="summary reveal" aria-label="期間概覽">
         <div class="stat"><div class="k" id="sumInK">本月收入</div><div class="v in" id="sumIn">—</div><div class="d" id="sumInD"></div></div>
         <div class="stat"><div class="k" id="sumOutK">本月支出</div><div class="v out" id="sumOut">—</div><div class="d" id="sumOutD"></div></div>
-        <div class="stat"><div class="k">本月結餘</div><div class="v" id="sumBal">—</div><div class="d">收入 − 支出（轉帳不計）</div></div>
+        <div class="stat"><div class="k" id="sumBalK">本月結餘</div><div class="v" id="sumBal">—</div><div class="d">收入 − 支出（轉帳不計）</div></div>
         <div class="stat"><div class="k">全部結餘</div><div class="v" id="sumAll">—</div><div class="d" id="sumAllD"></div></div>
       </section>
 
       <main>
       <div class="toolbar reveal">
+            <div class="period-seg" role="tablist" aria-label="檢視期間（週、月、季、年）">
+              <button type="button" data-period="week" role="tab" aria-selected="false">週</button>
+              <button type="button" data-period="month" role="tab" aria-selected="true" class="on">月</button>
+              <button type="button" data-period="quarter" role="tab" aria-selected="false">季</button>
+              <button type="button" data-period="year" role="tab" aria-selected="false">年</button>
+            </div>
             <div class="month-row">
               <button type="button" id="btnPrevM" aria-label="上一個月"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
               <div class="m-label" id="monthLabel">—</div>
@@ -1059,7 +1075,14 @@
 
       var records = [];       // {i,d,c,a(分),t,acc,n,to}
       var maxId = 0;
-      var viewMonth = "";     // "YYYY-MM"
+      var viewMonth = "";     // "YYYY-MM"（同 viewAnchor 嗰月同步，預算／日曆／走勢繼續按月用）
+      /* ===== 檢視期間：週／月／季／年（記帳本工具列切換，只存本機 localStorage） =====
+         viewAnchor 係期間錨點日期（YYYY-MM-DD）：週睇錨點嗰週（週一至週日）、季睇錨點嗰季、年睇錨點嗰年。 */
+      var PERIOD_LS = "jizhang.periodMode.v1";
+      var periodMode = "month";
+      try{ var pm0 = localStorage.getItem(PERIOD_LS); if(pm0==="week"||pm0==="month"||pm0==="quarter"||pm0==="year") periodMode = pm0; }catch(e){}
+      var viewAnchor = "";    // "YYYY-MM-DD"
+      var PERIOD_NAMES = { week:"週", month:"月", quarter:"季", year:"年" };
       var filters = { q:"", type:"all", cat:"all", acc:"all" };
       var showLimit = 200;
       var breakTab = 0;       // 0 支出 1 收入
@@ -1093,6 +1116,63 @@
         var y = parseInt(ym.slice(0,4),10), m = parseInt(ym.slice(5,7),10) + delta;
         while(m<1){ m+=12; y--; } while(m>12){ m-=12; y++; }
         return y + "-" + pad2(m);
+      }
+
+      /* ================= 檢視期間（週／月／季／年） ================= */
+      function dateOfStr(ds){ return new Date(parseInt(ds.slice(0,4),10), parseInt(ds.slice(5,7),10)-1, parseInt(ds.slice(8,10),10)); }
+      function strOfDate(dt){ return dt.getFullYear()+"-"+pad2(dt.getMonth()+1)+"-"+pad2(dt.getDate()); }
+      function mdTxt(ds){ return parseInt(ds.slice(5,7),10) + "月" + parseInt(ds.slice(8,10),10) + "日"; }
+      function periodRange(){
+        if(!viewAnchor) viewAnchor = todayStr();
+        var a = viewAnchor, y = parseInt(a.slice(0,4),10), m = parseInt(a.slice(5,7),10);
+        if(periodMode==="week"){
+          var dt = dateOfStr(a);
+          var mon = new Date(dt); mon.setDate(dt.getDate() - ((dt.getDay()+6)%7));
+          var sun = new Date(mon); sun.setDate(mon.getDate()+6);
+          var s = strOfDate(mon), e = strOfDate(sun), lbl;
+          if(s.slice(0,4)===e.slice(0,4) && s.slice(5,7)===e.slice(5,7)) lbl = s.slice(0,4) + " 年 " + mdTxt(s) + " – " + parseInt(e.slice(8,10),10) + "日";
+          else if(s.slice(0,4)===e.slice(0,4)) lbl = s.slice(0,4) + " 年 " + mdTxt(s) + " – " + mdTxt(e);
+          else lbl = s.slice(0,4) + " 年 " + mdTxt(s) + " – " + e.slice(0,4) + " 年 " + mdTxt(e);
+          return { start:s, end:e, label:lbl, short: mdTxt(s) + "–" + mdTxt(e) };
+        }
+        if(periodMode==="quarter"){
+          var q = Math.floor((m-1)/3), sm = q*3+1, lm = sm+2;
+          var dim = new Date(y, lm, 0).getDate();
+          return { start: y+"-"+pad2(sm)+"-01", end: y+"-"+pad2(lm)+"-"+pad2(dim),
+            label: y + " 年第 " + (q+1) + " 季（" + sm + "–" + lm + "月）", short: y + " 年第 " + (q+1) + " 季" };
+        }
+        if(periodMode==="year"){
+          return { start: y+"-01-01", end: y+"-12-31", label: y + " 年", short: y + " 年" };
+        }
+        var dimM = new Date(y, m, 0).getDate();
+        return { start: a.slice(0,7)+"-01", end: a.slice(0,7)+"-"+pad2(dimM), label: monthLabel(a.slice(0,7)), short: monthLabel(a.slice(0,7)) };
+      }
+      function inPeriod(ds){
+        var r = periodRange(), d = ds.slice(0,10);
+        return d>=r.start && d<=r.end;
+      }
+      function periodStats(){
+        var r = periodRange(), inc=0, out=0, incN=0, outN=0, trN=0;
+        for(var k=0;k<records.length;k++){
+          var rec = records[k], d = rec.d.slice(0,10);
+          if(d<r.start || d>r.end) continue;
+          if(rec.t===1){ inc+=rec.a; incN++; } else if(rec.t===0){ out+=rec.a; outN++; } else trN++;
+        }
+        return {inc:inc,out:out,incN:incN,outN:outN,trN:trN};
+      }
+      function shiftPeriod(delta){
+        if(!viewAnchor) viewAnchor = todayStr();
+        if(periodMode==="week"){
+          var dt = dateOfStr(viewAnchor);
+          dt.setDate(dt.getDate() + delta*7);
+          viewAnchor = strOfDate(dt);
+        } else {
+          var step = periodMode==="quarter" ? 3 : (periodMode==="year" ? 12 : 1);
+          var ym = shiftMonth(viewAnchor.slice(0,7), delta*step);
+          var day = Math.min(parseInt(viewAnchor.slice(8,10),10), new Date(parseInt(ym.slice(0,4),10), parseInt(ym.slice(5,7),10), 0).getDate());
+          viewAnchor = ym + "-" + pad2(day);
+        }
+        viewMonth = viewAnchor.slice(0,7);
       }
 
       /* ================= 資料存取 ================= */
@@ -1162,9 +1242,11 @@
         $("dataRange").textContent = min.slice(0,10) + " 至 " + max.slice(0,10) + " · 共 " + records.length.toLocaleString("en-US") + " 筆紀錄";
       }
       function renderSummary(){
-        var s = monthStats(viewMonth), all = allStats();
-        $("sumInK").textContent = monthLabel(viewMonth) + "收入";
-        $("sumOutK").textContent = monthLabel(viewMonth) + "支出";
+        var r = periodRange();
+        var s = periodStats(), all = allStats();
+        $("sumInK").textContent = r.short + "收入";
+        $("sumOutK").textContent = r.short + "支出";
+        $("sumBalK").textContent = r.short + "結餘";
         $("sumIn").textContent = fmtMoney(s.inc);
         $("sumOut").textContent = fmtMoney(s.out);
         $("sumInD").textContent = s.incN + " 筆";
@@ -1176,9 +1258,27 @@
         ael.textContent = fmtMoney(all.bal);
         ael.style.color = all.bal<0 ? "var(--red)" : "var(--green)";
         $("sumAllD").textContent = "收入 " + fmtMoney(all.inc) + " · 支出 " + fmtMoney(all.out);
-        $("monthLabel").textContent = monthLabel(viewMonth);
-        $("monthPick").value = viewMonth;
-        $("breakTitle").textContent = monthLabel(viewMonth) + "分類";
+        $("monthLabel").textContent = r.label;
+        var pick = $("monthPick");
+        if(periodMode==="week"){
+          if(pick.getAttribute("type")!=="date") pick.setAttribute("type","date");
+          pick.value = viewAnchor;
+          pick.setAttribute("aria-label","選擇日期（跳去嗰週）");
+        } else {
+          if(pick.getAttribute("type")!=="month") pick.setAttribute("type","month");
+          pick.value = viewMonth;
+          pick.setAttribute("aria-label","選擇月份");
+        }
+        $("btnThisM").textContent = periodMode==="week" ? "本週" : periodMode==="quarter" ? "本季" : periodMode==="year" ? "今年" : "今個月";
+        $("btnPrevM").setAttribute("aria-label", "上一" + PERIOD_NAMES[periodMode]);
+        $("btnNextM").setAttribute("aria-label", "下一" + PERIOD_NAMES[periodMode]);
+        var segBtns = document.querySelectorAll(".period-seg button");
+        for(var i=0;i<segBtns.length;i++){
+          var on = segBtns[i].getAttribute("data-period")===periodMode;
+          segBtns[i].classList.toggle("on", on);
+          segBtns[i].setAttribute("aria-selected", on ? "true" : "false");
+        }
+        $("breakTitle").textContent = r.short + "分類";
       }
 
       /* ================= 渲染：紀錄列表 ================= */
@@ -1192,7 +1292,7 @@
             var hay = (r.n+" "+r.c+" "+r.acc+" "+(r.to||"")+" "+TYPES[r.t]).toLowerCase();
             if(hay.indexOf(q)===-1) return false;
           } else {
-            if(monthOf(r.d)!==viewMonth) return false;
+            if(!inPeriod(r.d)) return false;
           }
           return true;
         });
@@ -1206,9 +1306,9 @@
         var searching = !!filters.q.trim();
         $("countLine").textContent = searching
           ? "搜尋結果：" + list.length + " 筆（跨月份）"
-          : monthLabel(viewMonth) + "共 " + list.length + " 筆";
+          : periodRange().label + "共 " + list.length + " 筆";
         if(!list.length){
-          host.innerHTML = '<div class="empty">呢個月未有符合嘅紀錄。<br/><br/><button type="button" class="primary" onclick="openForm()">新增一筆</button></div>';
+          host.innerHTML = '<div class="empty">呢段期間未有符合嘅紀錄。<br/><br/><button type="button" class="primary" onclick="openForm()">新增一筆</button></div>';
           $("btnMore").style.display = "none";
           return;
         }
@@ -1262,12 +1362,12 @@
         $("tabIn").className = breakTab===1 ? "on-in" : "";
         var agg = {}, total = 0;
         records.forEach(function(r){
-          if(monthOf(r.d)!==viewMonth || r.t!==breakTab) return;
+          if(!inPeriod(r.d) || r.t!==breakTab) return;
           var k = r.c || "未分類";
           agg[k]=(agg[k]||0)+r.a; total+=r.a;
         });
         var keys = Object.keys(agg).sort(function(a,b){ return agg[b]-agg[a]; });
-        if(!keys.length || !total){ $("breakHost").innerHTML = '<p class="hint">呢個月未有' + (breakTab===0?"支出":"收入") + "紀錄。</p>"; return; }
+        if(!keys.length || !total){ $("breakHost").innerHTML = '<p class="hint">呢段期間未有' + (breakTab===0?"支出":"收入") + "紀錄。</p>"; return; }
         var max = agg[keys[0]];
         var color = breakTab===0 ? "var(--red)" : "var(--green)";
         var html = "";
@@ -1514,6 +1614,7 @@
         } else {
           maxId++;
           records.push({ i:maxId, d:dstr, c:cat, a:cents, t:formType, acc:acc, n:$("inNote").value.trim(), to:to });
+          viewAnchor = dstr.slice(0,10);
           viewMonth = monthOf(dstr);
           showToast("已新增一筆");
         }
@@ -1652,10 +1753,25 @@
 
       /* ================= 事件 ================= */
       function bind(){
-        $("btnPrevM").addEventListener("click", function(){ viewMonth = shiftMonth(viewMonth,-1); showLimit=200; renderSummary(); renderList(); renderBreakdown(); renderTrend(); });
-        $("btnNextM").addEventListener("click", function(){ viewMonth = shiftMonth(viewMonth,1); showLimit=200; renderSummary(); renderList(); renderBreakdown(); renderTrend(); });
-        $("btnThisM").addEventListener("click", function(){ viewMonth = todayStr().slice(0,7); showLimit=200; renderSummary(); renderList(); renderBreakdown(); renderTrend(); });
-        $("monthPick").addEventListener("change", function(){ if(this.value){ viewMonth=this.value; showLimit=200; renderSummary(); renderList(); renderBreakdown(); renderTrend(); } });
+        $("btnPrevM").addEventListener("click", function(){ shiftPeriod(-1); showLimit=200; renderSummary(); renderList(); renderBreakdown(); renderTrend(); });
+        $("btnNextM").addEventListener("click", function(){ shiftPeriod(1); showLimit=200; renderSummary(); renderList(); renderBreakdown(); renderTrend(); });
+        $("btnThisM").addEventListener("click", function(){ viewAnchor = todayStr(); viewMonth = viewAnchor.slice(0,7); showLimit=200; renderSummary(); renderList(); renderBreakdown(); renderTrend(); });
+        $("monthPick").addEventListener("change", function(){
+          if(!this.value) return;
+          viewAnchor = periodMode==="week" ? this.value : this.value + "-01";
+          viewMonth = viewAnchor.slice(0,7);
+          showLimit=200; renderSummary(); renderList(); renderBreakdown(); renderTrend();
+        });
+        var pBtns = document.querySelectorAll(".period-seg button");
+        for(var pi=0; pi<pBtns.length; pi++){
+          (function(btn){ btn.addEventListener("click", function(){
+            var p = btn.getAttribute("data-period");
+            if(p===periodMode) return;
+            periodMode = p;
+            try{ localStorage.setItem(PERIOD_LS, p); }catch(e){}
+            showLimit=200; renderSummary(); renderList(); renderBreakdown(); renderTrend();
+          }); })(pBtns[pi]);
+        }
         $("qSearch").addEventListener("input", function(){ filters.q = this.value; showLimit=200; renderList(); });
         $("fType").addEventListener("change", function(){ filters.type = this.value; showLimit=200; renderList(); });
         $("fCat").addEventListener("change", function(){ filters.cat = this.value; showLimit=200; renderList(); });
@@ -1724,10 +1840,11 @@
       (function initMonth(){
         var cur = todayStr().slice(0,7);
         var has = records.some(function(r){ return monthOf(r.d)===cur; });
-        if(has){ viewMonth = cur; return; }
+        if(has){ viewMonth = cur; viewAnchor = todayStr(); return; }
         var max = "0000-00";
         records.forEach(function(r){ var m = monthOf(r.d); if(m>max) max=m; });
         viewMonth = (max==="0000-00") ? cur : max;
+        viewAnchor = (viewMonth===cur) ? todayStr() : viewMonth + "-01";
       })();
       bind();
       applyCurrencyUI();
@@ -2144,7 +2261,7 @@ host.innerHTML = html;
 /* ================= AI 入帳 chatbox ================= */
 var GEMINI_KEY_LS = "jizhang.geminiKey.v1";
 /* 2026-11 以實測為準：gemini-2.5-flash／2.0-flash 對新 Key 已停用（generateContent 回 404），改用現行 Flash 型號，逐個試到通為止 */
-var GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"];
+var GEMINI_MODELS = window.GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"];
 var chat = { type: 0, acc: "", parsed: null, batch: null, busy: false, awaitingAcc: false };
 function chatMsgs(){ return $("chatMsgs"); }
 function scrollChat(){
