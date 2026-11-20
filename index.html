@@ -2143,6 +2143,8 @@ host.innerHTML = html;
 
 /* ================= AI 入帳 chatbox ================= */
 var GEMINI_KEY_LS = "jizhang.geminiKey.v1";
+/* 2026-11 以實測為準：gemini-2.5-flash／2.0-flash 對新 Key 已停用（generateContent 回 404），改用現行 Flash 型號，逐個試到通為止 */
+var GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"];
 var chat = { type: 0, acc: "", parsed: null, batch: null, busy: false, awaitingAcc: false };
 function chatMsgs(){ return $("chatMsgs"); }
 function scrollChat(){
@@ -2315,16 +2317,21 @@ var prompt = "你係記帳助手。用戶講咗一句記帳描述，請先判斷
 "規則：type 0 代表支出、1 代表收入（例如出糧、兼職、收錢、退款係收入；買嘢、食飯、搭車係支出）；category 要同 type 對應嗰組類別；amount 係純數字（" + CUR.name + " " + CUR.code + "），唔好加貨幣符號；冇寫日期就用今日日期；note 係嗰樣嘢本身（例如「漢堡」），唔好包含金額；全程繁體中文。\n" +
 "用戶講：「" + text + "」";
 var body = JSON.stringify({ contents: [{ parts: [{ text: prompt }]}], generationConfig: { temperature: 0.1, responseMimeType: "application/json" } });
-var url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
-function go(u, headers){
-return fetch(u, { method: "POST", headers: headers, body: body }).then(function(resp){
+function go(model){
+var url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
+return fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: body }).then(function(resp){
 if(!resp.ok) throw new Error("http-" + resp.status);
 return resp.json();
 });
 }
-var call = go(url, { "Content-Type": "application/json", "x-goog-api-key": key });
+function attempt(mi){
 var timeout = new Promise(function(_, rej){ setTimeout(function(){ rej(new Error("timeout")); }, 15000); });
-return Promise.race([call, timeout]).then(function(data){
+return Promise.race([go(GEMINI_MODELS[mi]), timeout]).catch(function(e){
+if(mi+1<GEMINI_MODELS.length) return attempt(mi+1);
+throw e;
+});
+}
+return attempt(0).then(function(data){
 var parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
 if(!parts) throw new Error("empty");
 var txt = parts.map(function(p){ return p.text || ""; }).join("");
@@ -2800,7 +2807,7 @@ renderFeatures();
 (function(){
 "use strict";
 var KEY_LS = "jizhang.geminiKey.v1";
-var MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+var MODELS = GEMINI_MODELS;
 var aiFindings = [], aiSuggestions = [];
 
 function setMsg(id, txt, ok){
@@ -2928,8 +2935,9 @@ try{ var j = JSON.parse(body); if(j.error && j.error.message) msg = j.error.mess
 if(/location is not supported/i.test(msg)) return "Google 回覆：你而家網絡所在地區唔支援 Gemini API（香港暫時唔喺支援名單入面）。可以改用「複製摘要」，貼去 Gemini app 問。";
 if(status===400) return "請求格式或 API Key 有問題（HTTP 400）" + (msg? "：" + msg: "");
 if(status===401 || status===403) return "API Key 無效或未啟用（HTTP " + status + "）" + (msg? "：" + msg: "") + "。請檢查條 Key 係咪正確。";
-if(status===404) return "搵唔到指定嘅 Gemini 模型（HTTP 404）。";
+if(status===404) return "搵唔到指定嘅 Gemini 模型（HTTP 404）" + (msg? "：" + msg: "");
 if(status===429) return "Gemini 用量已達上限（HTTP 429），請遲啲再試。";
+if(status===503) return "Gemini 嗰邊暫時好忙（HTTP 503），請遲啲再試。";
 return "Gemini 回傳錯誤（HTTP " + status + "）" + (msg? "：" + msg: "");
 }
 function callGemini(key, model, prompt){
@@ -2953,13 +2961,19 @@ function testConnection(){
 var key = currentKey();
 if(!key){ setMsg("keyMsg", "請先貼上 Gemini API Key，先可以測試連接。", false); return;}
 setMsg("keyMsg", "測試連接中…", true);
-var url = "https://generativelanguage.googleapis.com/v1beta/models";
-function ok(){ setMsg("keyMsg", "連接成功：條 Key 用得，Gemini API 有回應。", true);}
-function httpFail(st){ setMsg("keyMsg", "連接失敗：HTTP " + st + "。請檢查條 Key 係咪正確、或者有冇啟用到 Gemini API。", false);}
-function netFail(){ setMsg("keyMsg", "連接失敗：網絡去唔到 Google API。" + NET_HINT, false);}
-fetch(url, { headers: { "x-goog-api-key": key}}).then(function(resp){
-if(resp.ok) ok(); else httpFail(resp.status);
-}).catch(netFail);
+/* 真發一個最細嘅 generateContent 請求，逐個模型試；齋查模型清單會照樣「成功」但實際審核用唔到 */
+var body = JSON.stringify({ contents: [{ parts: [{ text: "請只回覆 OK" }]}]});
+function tryModel(mi){
+var url = "https://generativelanguage.googleapis.com/v1beta/models/" + MODELS[mi] + ":generateContent";
+return fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: body }).then(function(resp){
+return resp.text().then(function(txt){
+if(resp.ok){ setMsg("keyMsg", "連接成功：條 Key 用得，模型 " + MODELS[mi] + " 有回應，可以開始 AI 審核。", true); return;}
+if((resp.status===404 || resp.status===503) && mi+1<MODELS.length) return tryModel(mi+1);
+setMsg("keyMsg", "連接失敗：" + errText(resp.status, txt), false);
+});
+}).catch(function(){ setMsg("keyMsg", "連接失敗：網絡去唔到 Google API。" + NET_HINT, false);});
+}
+tryModel(0);
 }
 
 /* ---------- 結果渲染與套用 ---------- */
@@ -3048,7 +3062,7 @@ setMsg("aiMsg", "正在將統計摘要傳去 Gemini 審核（唔包括逐筆紀�
 var prompt = buildPrompt(buildSummary());
 var attempt = function(mi){
 return callGemini(key, MODELS[mi], prompt).catch(function(e){
-if(e.status===404 && mi+1<MODELS.length) return attempt(mi+1);
+if((e.status===404 || e.status===503) && mi+1<MODELS.length) return attempt(mi+1);
 throw e;
 });
 };
