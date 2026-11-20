@@ -530,7 +530,8 @@
       .cur-menu button.on{ color:var(--accent); font-weight:700; }
       .cur-menu .cm-sym{ color:var(--muted); font-variant-numeric:tabular-nums; font-size:13px; }
       .cur-menu button.on .cm-sym{ color:var(--accent); }
-      @media (max-width:640px){ .cur-menu{ min-width:min(238px, 78vw); } }
+      /* 手機：選單闊度由 JS 按實際掣位計好（placeMenu），唔好俾 min-width 頂闊過畫面 */
+      @media (max-width:640px){ .cur-menu{ min-width:0; } }
     </style>
     <style id="fx-style">
       /* ===== 匯率換算 ===== */
@@ -3183,8 +3184,27 @@ initAi();
             }); })(btns[i]);
           }
         }
+        /* 手機上貨幣掣唔喺畫面最右邊，選單用 right:0 向左伸會伸出畫面左邊，
+           遮住貨幣名（例如「英鎊」）。開選單嗰陣按掣嘅實際位置計返一個
+           完全喺畫面入面嘅左邊界同闊度；桌面版維持原本靠右下拉，唔郁。 */
+        function placeMenu(){
+          if(!curBtn || !curMenu) return;
+          if(window.innerWidth <= 640){
+            var wrap = curBtn.parentNode.getBoundingClientRect();
+            var w = Math.min(320, window.innerWidth - 24);
+            var left = Math.max(12, Math.min(wrap.right - w, window.innerWidth - 12 - w));
+            curMenu.style.width = w + "px";
+            curMenu.style.left = (left - wrap.left) + "px";
+            curMenu.style.right = "auto";
+          } else {
+            curMenu.style.width = "";
+            curMenu.style.left = "";
+            curMenu.style.right = "";
+          }
+        }
         function openMenu(){
           buildMenu();
+          placeMenu();
           curMenu.classList.add("open");
           if(curBtn) curBtn.setAttribute("aria-expanded","true");
         }
@@ -3198,6 +3218,7 @@ initAi();
             if(curMenu.classList.contains("open")) closeMenu(); else openMenu();
           });
           curMenu.addEventListener("click", function(e){ e.stopPropagation(); });
+          window.addEventListener("resize", function(){ if(curMenu.classList.contains("open")) placeMenu(); });
           document.addEventListener("click", function(){ closeMenu(); });
           document.addEventListener("keydown", function(e){ if(e.key==="Escape") closeMenu(); });
         }
