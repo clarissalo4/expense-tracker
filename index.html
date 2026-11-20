@@ -625,7 +625,7 @@
       <p class="hint wallet-hint">結餘由你自己嘅紀錄推算，再加下面你設定嘅期初調整；新增、修改或刪除紀錄，結餘會即時跟住調整。</p>
       <section class="panel reveal" aria-label="管理帳戶" style="margin-top:16px">
         <h2>管理帳戶</h2>
-        <p class="hint">呢度唔會預設任何帳戶：你用開邊啲銀行、現金、信用卡，就自己加返，唔啱用嘅隨時刪除。新增同刪除都只存喺呢部機。刪除帳戶唔會刪走紀錄；如果有紀錄用緊嗰個帳戶，刪除前會話你知有幾筆，刪咗之後啲紀錄會保留個帳戶名，但唔再計入錢包結餘。另外，開 AI 入帳打「新增帳戶 中銀」都可以直接加帳戶。</p>
+        <p class="hint">唔會預設任何帳戶：自己加返用開嘅銀行、現金、信用卡，唔啱用隨時刪除，只存喺呢部機。刪除帳戶唔會刪走紀錄，但有紀錄用緊嗰陣會先話你知有幾筆。用 AI 入帳打「新增帳戶 中銀」都可以加帳戶。</p>
         <div id="accListHost"></div>
         <div class="acc-form">
           <input type="text" id="accName" placeholder="帳戶名稱，例如：中銀、現金、八達通" aria-label="新帳戶名稱" />
@@ -638,7 +638,7 @@
       </section>
       <section class="panel reveal" aria-label="期初結餘調整" style="margin-top:16px">
         <h2>期初結餘調整</h2>
-        <p class="hint">開始記帳之前，某個帳戶已經有錢（或者信用卡已有欠款），就喺度填返個期初數：資產填正數、欠款填負數（例如 −1000），錢包結餘會加埋一齊計。呢啲數字只存喺呢部機嘅瀏覽器，唔會寫入網站檔案、唔會上載去 GitHub；其他人喺自己部機開呢個網站，見到嘅只會係佢自己填嘅數，預設全部係 0。唔想逐個打，可以撳下面「匯入設定檔」，一次過入返成組期初調整，連每月預算同定期項目都一齊還原；設定檔唔包含紀錄同 API Key，只存喺你自己部機，唔好上載去 GitHub。</p>
+        <p class="hint">開始記帳前帳戶已有錢（或信用卡有欠款），就喺度填返：資產填正數、欠款填負數（例如 −1000）。數字只存喺呢部機，唔會上載，預設係 0。亦可撳下面「匯入設定檔」，一次過還原期初調整、預算同定期項目（唔包含紀錄同 API Key，唔好上載去 GitHub）。</p>
         <div id="walletAdjHost"></div>
         <div class="data-btns">
           <button type="button" id="btnImportSettings">匯入設定檔</button>
@@ -656,7 +656,7 @@
       <h2 class="view-title">每月預算</h2>
       <section class="panel reveal" aria-label="每月預算">
             <h2>每月預算</h2>
-            <p class="hint">下面係預設預算，每類都可以改，改咗只存喺呢部機。用到 80% 會黃色提示，超 100% 紅色提示。「定期」係儲蓄轉移、「旅遊」係一次性大額，兩者唔計入每月預算；旅遊改用下面嘅年度預算。醫療開支波動大，<span id="budMedAmt">$1,000</span> 只作參考上限，唔當硬性超支警告。</p>
+            <p class="hint">每類預算都可以改，只存喺呢部機。用到 80% 黃色提示，超 100% 紅色提示。「定期」同「旅遊」唔計入每月預算（旅遊用下面嘅年度預算）；醫療 <span id="budMedAmt">$1,000</span> 只作參考上限。</p>
             <div id="budgetHost"></div>
           </section>
     </div>
@@ -713,12 +713,12 @@
               <button type="button" id="btnFxRefresh">重新攞匯率</button>
               <button type="button" id="btnFxSetBook">將「換成」嗰隻設為記帳貨幣</button>
             </div>
-            <p class="hint" style="margin-top:14px"><strong style="color:var(--ink)">匯率點嚟？</strong>主要來源係 ExchangeRate-API（open.er-api.com）提供嘅市場中間價 — 即係買入價同賣出價中間嘅參考價，唔係任何一間銀行嘅報價。如果主要來源攞唔到，會自動轉用後備來源 Frankfurter（frankfurter.app），佢用嘅係歐洲央行每日公佈嘅參考匯率。每次換算上面「匯率來源」嗰行會寫明今次實際用咗邊個來源同更新時間，以嗰行作準。</p>
-            <p class="hint" style="margin-top:8px">所以呢度嘅匯率只供參考：唔係銀行／找換店嘅買入價或賣出價，亦未計手續費同差價，實際兌換以銀行／找換店當時報價為準，金額大嘅時候出入可以幾明顯。換算只係俾你睇數字，唔會改動你任何紀錄嘅金額；想成個帳本轉用另一隻貨幣，用頂部嘅貨幣掣或者下面「將『換成』嗰隻設為記帳貨幣」。</p>
+            <p class="hint" style="margin-top:14px"><strong style="color:var(--ink)">匯率來源：</strong>ExchangeRate-API 嘅市場中間價（參考價，唔係銀行報價）；攞唔到會轉用 Frankfurter（歐洲央行參考匯率）。今次用咗邊個來源同更新時間，以上面「匯率來源」嗰行為準。</p>
+            <p class="hint" style="margin-top:8px">只供參考：唔係銀行／找換店買賣價，未計手續費，實際兌換以當時報價為準。換算唔會改動任何紀錄金額。</p>
           </section>
       <section class="panel reveal" aria-label="換成其他貨幣一覽" style="margin-top:16px">
             <h2>換成其他貨幣一覽</h2>
-            <p class="hint" style="margin-bottom:10px">同上面用同一組匯率：主要係 ExchangeRate-API 市場中間價，攞唔到先轉用 Frankfurter／歐洲央行參考匯率；實際來源同更新時間睇上面「匯率來源」嗰行。</p>
+            <p class="hint" style="margin-bottom:10px">同上面同一組匯率；實際來源同更新時間睇上面「匯率來源」嗰行。</p>
             <div id="fxTable"><p class="hint">未載入匯率。</p></div>
           </section>
     </div>
@@ -727,7 +727,7 @@
       <h2 class="view-title">更多</h2>
       <section class="panel reveal" aria-label="加到主畫面">
             <h2>加到主畫面（當 App 用）</h2>
-            <p class="hint">將記帳本加去手機主畫面，之後撳個圖示就直接開，成個畫面用、唔使再開瀏覽器搵條連結。免費、唔使去 App Store 下載、唔使註冊。你之前入過嘅紀錄會照舊喺度，因為加主畫面用嘅係同一個網站、同一份本機資料。</p>
+            <p class="hint">加去手機主畫面，之後撳圖示就直接開，唔使開瀏覽器搵連結。免費、唔使下載、唔使註冊；你嘅紀錄會照舊喺度。</p>
             <div class="pwa-actions">
               <button type="button" class="primary" id="btnPwaInstall" style="display:none">加到主畫面</button>
             </div>
@@ -746,7 +746,7 @@
 
       <section class="panel reveal" aria-label="貨幣設定">
             <h2>貨幣</h2>
-            <p class="hint">揀返你記帳用嘅貨幣，成個網站顯示嘅金額符號都會跟住轉，匯出 CSV 嘅「貨幣」欄亦會寫返你揀嗰隻。頁面最頂工具列亦有一個貨幣掣（顯示緊而家用嘅貨幣），撳佢即刻轉，唔使入嚟呢頁。想睇兩隻貨幣之間值幾多，去底部「換算」分頁，有即時匯率換算。留意：轉貨幣只係轉顯示符號，唔會將現有紀錄嘅金額按匯率換算——喺英國用就由第一筆開始用英鎊入帳。設定只存喺呢部機，亦會包埋喺設定檔入面，換機匯入返就唔使再揀。</p>
+            <p class="hint">揀邊隻貨幣，成個網站嘅金額符號同匯出 CSV 都會跟住轉；頂部嘅貨幣掣都可以即刻轉。兩隻貨幣點換算，去「換算」分頁睇。留意：只轉顯示符號，唔會按匯率換算現有紀錄金額。設定只存喺呢部機，亦會包埋喺設定檔。</p>
             <div class="cur-row">
               <label class="fl" for="curSelect">顯示貨幣</label>
               <select id="curSelect" aria-label="選擇貨幣"></select>
@@ -756,7 +756,7 @@
 
       <section class="panel reveal" aria-label="備份與還原">
             <h2>備份／換機</h2>
-            <p class="hint">資料只存喺呢部機嘅瀏覽器入面。換機或者去 GitHub Pages 用之前，先匯出 CSV，去到新機／新網址再匯入就得，唔使會員、唔使登入。匯入會自動跳過重複紀錄。亦可以直接將 CSV 或者設定檔（JSON）拖入頁面任何位置，鬆手即刻匯入，唔使撳掣揀檔案。</p>
+            <p class="hint">資料只存喺呢部機。換機前先匯出 CSV，新機再匯入就得，唔使登入；匯入會自動跳過重複紀錄。亦可以將 CSV 或設定檔（JSON）直接拖入頁面任何位置匯入。</p>
             <div class="data-btns">
               <button type="button" id="btnImport2">匯入 CSV</button>
               <button type="button" id="btnExport2">匯出 CSV（全部紀錄）</button>
@@ -777,7 +777,7 @@
 
       <section class="panel reveal" aria-label="AI 審核">
         <h2>AI 審核（Gemini）</h2>
-        <p class="hint">用 Google Gemini 幫你睇一次帳目。傳去 Gemini 嘅只係統計摘要（帳戶結餘、每月同分類總數、近六個月走勢、異常提示），唔會傳逐筆紀錄。AI 只會提出建議，唔會直接改數據：每項建議要你逐項撳「套用」先會生效。</p>
+        <p class="hint">用 Gemini 睇一次帳目：傳去嘅只係統計摘要（結餘、分類總數、走勢、異常提示），唔會傳逐筆紀錄。AI 只提建議，每項要你撳「套用」先會生效。</p>
         <label class="fl" for="geminiKey" style="margin-top:14px">Gemini API Key</label>
         <div class="key-row">
           <input type="password" id="geminiKey" placeholder="貼上你嘅 Gemini API Key" autocomplete="off" spellcheck="false" />
@@ -817,7 +817,7 @@
           <h2 id="chatTitle">同 Gemini 講入帳</h2>
           <button type="button" id="btnChatClose">關閉</button>
         </div>
-        <p class="hint" style="margin-bottom:10px">直接打一句說話（例如「漢堡 50」或者「出糧 5000」），AI 會自動分辨支出／收入、金額、類別同備註，然後再問你用邊個帳戶。入數之前一定會俾你核對預覽，類型分辨錯可以喺預覽即刻改返；你撳「確認儲存」先會入帳。想加新帳戶，直接打「新增帳戶 中銀」就得，唔使離開呢度。未設定 Gemini Key 或者連唔到嗰陣，會自動改用本地關鍵字分辨，流程一樣。</p>
+        <p class="hint" style="margin-bottom:10px">打一句說話就得（例如「漢堡 50」），AI 會自動分辨支出／收入、金額、類別同備註，再問你用邊個帳戶。入帳前有預覽俾你核對同改類型，撳「確認儲存」先會入帳。打「新增帳戶 中銀」可以加帳戶；未設定 Key 或連唔到，會自動用本地關鍵字分辨。</p>
         <div class="chat-msgs" id="chatMsgs"></div>
         <div class="chat-input-row" id="chatInputRow" style="display:none">
           <input type="text" id="chatText" placeholder="例如：漢堡 50、搭車 100、lunch 68" autocomplete="off" />
@@ -943,7 +943,8 @@
         { code:"AUD", name:"澳元", sym:"A$" },
         { code:"CAD", name:"加元", sym:"C$" },
         { code:"SGD", name:"新加坡元", sym:"S$" },
-        { code:"KRW", name:"韓圜", sym:"₩" }
+        { code:"KRW", name:"韓圜", sym:"₩" },
+        { code:"VND", name:"越南盾", sym:"₫" }
       ];
       var CUR_LS = "jizhang.currency.v1";
       function currencyByCode(code){
@@ -3230,7 +3231,7 @@ initAi();
         function fxSym(code){ var c = currencyByCode(code); return c ? c.sym : code; }
         function fxName(code){ var c = currencyByCode(code); return c ? c.name : code; }
         function fmtConv(v, code){
-          var dec = (code==="JPY" || code==="KRW") ? 0 : 2;
+          var dec = (code==="JPY" || code==="KRW" || code==="VND") ? 0 : 2;
           return v.toLocaleString("en-US", { minimumFractionDigits:dec, maximumFractionDigits:dec });
         }
         function fmtRate(r){
