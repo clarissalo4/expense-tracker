@@ -484,6 +484,14 @@
       .acc-form .primary{ padding:9px 22px; }
       @media (max-width:640px){ .acc-form select{ flex:1 1 100%; } .acc-form .primary{ flex:1 1 100%; } }
     </style>
+    <style id="cur-style">
+      /* ===== 貨幣設定 ===== */
+      .cur-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:14px; }
+      .cur-row .fl{ margin-bottom:0; }
+      .cur-row select{ flex:1 1 220px; border-radius:14px; background:var(--surface2); border-color:transparent; padding:9px 13px; }
+      .cur-row select:focus{ background:var(--surface); }
+      .cur-now{ font-size:13.5px; color:var(--muted); font-variant-numeric:tabular-nums; }
+    </style>
   </head>
   <body>
     <header class="topbar">
@@ -580,7 +588,7 @@
       <h2 class="view-title">每月預算</h2>
       <section class="panel reveal" aria-label="每月預算">
             <h2>每月預算</h2>
-            <p class="hint">下面係預設預算，每類都可以改，改咗只存喺呢部機。用到 80% 會黃色提示，超 100% 紅色提示。「定期」係儲蓄轉移、「旅遊」係一次性大額，兩者唔計入每月預算；旅遊改用下面嘅年度預算。醫療開支波動大，$1,000 只作參考上限，唔當硬性超支警告。</p>
+            <p class="hint">下面係預設預算，每類都可以改，改咗只存喺呢部機。用到 80% 會黃色提示，超 100% 紅色提示。「定期」係儲蓄轉移、「旅遊」係一次性大額，兩者唔計入每月預算；旅遊改用下面嘅年度預算。醫療開支波動大，<span id="budMedAmt">$1,000</span> 只作參考上限，唔當硬性超支警告。</p>
             <div id="budgetHost"></div>
           </section>
     </div>
@@ -614,6 +622,16 @@
 
     <div id="view-more" class="view">
       <h2 class="view-title">更多</h2>
+      <section class="panel reveal" aria-label="貨幣設定">
+            <h2>貨幣</h2>
+            <p class="hint">揀返你記帳用嘅貨幣，成個網站顯示嘅金額符號都會跟住轉，匯出 CSV 嘅「貨幣」欄亦會寫返你揀嗰隻。留意：轉貨幣只係轉顯示符號，唔會將現有紀錄嘅金額按匯率換算——喺英國用就由第一筆開始用英鎊入帳。設定只存喺呢部機，亦會包埋喺設定檔入面，換機匯入返就唔使再揀。</p>
+            <div class="cur-row">
+              <label class="fl" for="curSelect">顯示貨幣</label>
+              <select id="curSelect" aria-label="選擇貨幣"></select>
+              <span class="cur-now" id="curNow"></span>
+            </div>
+          </section>
+
       <section class="panel reveal" aria-label="備份與還原">
             <h2>備份／換機</h2>
             <p class="hint">資料只存喺呢部機嘅瀏覽器入面。換機或者去 GitHub Pages 用之前，先匯出 CSV，去到新機／新網址再匯入就得，唔使會員、唔使登入。匯入會自動跳過重複紀錄。亦可以直接將 CSV 或者設定檔（JSON）拖入頁面任何位置，鬆手即刻匯入，唔使撳掣揀檔案。</p>
@@ -699,7 +717,7 @@
         <form id="recForm" novalidate>
           <div class="f-grid">
             <div class="full">
-              <label class="fl" for="inAmount">金額（HKD）</label>
+              <label class="fl" for="inAmount" id="amtLabel">金額（HKD）</label>
               <input class="amt-input" id="inAmount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" required />
             </div>
             <div>
@@ -788,6 +806,55 @@
       ACC_OBJS.forEach(function(o){ ACC_KINDS[o.name] = o.kind; });
       var armedAccDel = null, armedAccDelTimer = null;
       var TYPES = ["支出", "收入", "轉帳"];
+      /* ===== 貨幣：用家自己揀顯示貨幣（預設港幣），只存本機 localStorage（jizhang.currency.v1）。
+         轉貨幣只轉顯示符號，唔做匯率換算：紀錄金額本身就係以所揀貨幣入帳嘅數字。
+         CUR / CUR_SYM 係全域變數，其他 script（預算、日曆、AI 審核、動效）都係讀呢兩個。 ===== */
+      var CURRENCIES = [
+        { code:"HKD", name:"港幣", sym:"HK$" },
+        { code:"GBP", name:"英鎊", sym:"£" },
+        { code:"USD", name:"美元", sym:"US$" },
+        { code:"EUR", name:"歐元", sym:"€" },
+        { code:"JPY", name:"日圓", sym:"¥" },
+        { code:"CNY", name:"人民幣", sym:"CN¥" },
+        { code:"TWD", name:"新台幣", sym:"NT$" },
+        { code:"AUD", name:"澳元", sym:"A$" },
+        { code:"CAD", name:"加元", sym:"C$" },
+        { code:"SGD", name:"新加坡元", sym:"S$" },
+        { code:"KRW", name:"韓圜", sym:"₩" }
+      ];
+      var CUR_LS = "jizhang.currency.v1";
+      function currencyByCode(code){
+        for(var i=0;i<CURRENCIES.length;i++){ if(CURRENCIES[i].code===code) return CURRENCIES[i]; }
+        return null;
+      }
+      function loadCurrency(){
+        var code = "HKD";
+        try{ code = localStorage.getItem(CUR_LS) || "HKD"; }catch(e){}
+        return currencyByCode(code) || CURRENCIES[0];
+      }
+      var CUR = loadCurrency();
+      var CUR_SYM = CUR.sym;
+      function applyCurrencyUI(){
+        CUR_SYM = CUR.sym;
+        var cs = document.getElementById("curSelect");
+        if(cs) cs.value = CUR.code;
+        var now = document.getElementById("curNow");
+        if(now) now.textContent = "而家用緊：" + CUR.name + "（" + CUR.code + "），例如 " + CUR.sym + "1,234.50";
+        var al = document.getElementById("amtLabel");
+        if(al) al.textContent = "金額（" + CUR.code + "）";
+        var bm = document.getElementById("budMedAmt");
+        if(bm) bm.textContent = CUR.sym + "1,000";
+      }
+      function setCurrency(code, silent){
+        var c = currencyByCode(code);
+        if(!c) return false;
+        CUR = c;
+        try{ localStorage.setItem(CUR_LS, CUR.code); }catch(e){}
+        applyCurrencyUI();
+        if(typeof renderAll === "function") renderAll();
+        if(!silent) showToast("貨幣已轉做" + CUR.name + "（" + CUR.code + "）");
+        return true;
+      }
       var EXP_CATS = ["飲食","交通","日常","通信","娛樂","服飾","醫療","美容","旅遊","教育","社交","禮物","居住","稅項","定期"];
       var INC_CATS = ["工資","獎金","收錢","入錢","零用","兼職"];
       var CAT_COLORS = {"飲食":"#BC5216","交通":"#2B6CB0","日常":"#5F7A3A","通信":"#5B5EA6","娛樂":"#9C4221","服飾":"#8A6D1F","醫療":"#B23A48","美容":"#A34A7E","旅遊":"#2C7A7B","教育":"#44546A","社交":"#7A6C2F","禮物":"#9B2C5C","居住":"#4A6741","稅項":"#5A4A3A","定期":"#3E5C50","工資":"#1E7A46","獎金":"#B7791F","收錢":"#27795C","入錢":"#2F855A","零用":"#6B8E23","兼職":"#38618C","轉帳":"#5A5E55"};
@@ -869,7 +936,7 @@
       function fmtMoney(cents, sign){
         var v = Math.abs(cents)/100;
         var s = v.toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2});
-        return (sign||"") + "HK$" + s;
+        return (sign||"") + CUR.sym + s;
       }
       function fmtAmt(cents){ return (cents/100).toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2}); }
       function monthOf(d){ return d.slice(0,7); }
@@ -965,7 +1032,7 @@
         $("sumInD").textContent = s.incN + " 筆";
         $("sumOutD").textContent = s.outN + " 筆" + (s.trN ? " · 轉帳 " + s.trN + " 筆" : "");
         var bal = s.inc - s.out, el = $("sumBal");
-        el.textContent = (bal<0?"−":"") + fmtMoney(bal).replace("HK$","HK$");
+        el.textContent = (bal<0?"−":"") + fmtMoney(bal);
         el.style.color = bal<0 ? "var(--red)" : "var(--green)";
         var ael = $("sumAll");
         ael.textContent = fmtMoney(all.bal);
@@ -1113,7 +1180,7 @@
         ACCOUNTS.forEach(function(name){
           var v = typeof adj[name]==="number" ? String(adj[name]/100) : "";
           html += '<div class="wadj-row"><span class="wn">' + esc(name) + '</span>' +
-            '<span class="wadj-edit">調整 $<input type="number" step="0.01" data-wadj="' + esc(name) + '" value="' + v + '" placeholder="0" aria-label="' + esc(name) + ' 期初調整" /></span></div>';
+            '<span class="wadj-edit">調整 ' + CUR.sym + '<input type="number" step="0.01" data-wadj="' + esc(name) + '" value="' + v + '" placeholder="0" aria-label="' + esc(name) + ' 期初調整" /></span></div>';
         });
         host.innerHTML = html;
         var inputs = host.querySelectorAll("[data-wadj]");
@@ -1353,7 +1420,7 @@
         var sorted = records.slice().sort(function(a,b){ if(a.d!==b.d) return a.d<b.d?-1:1; return a.i-b.i; });
         var lines = ["日期,類別,金額,類型,帳戶,成員,貨幣,帳本,備註,轉入帳戶"];
         sorted.forEach(function(r){
-          lines.push([r.d, r.t===2?"":r.c, (r.a/100).toFixed(2), TYPES[r.t], r.acc, r.t===2?"":"自己", "HKD", "預設帳本", r.n||"", r.to||""].map(csvCell).join(","));
+          lines.push([r.d, r.t===2?"":r.c, (r.a/100).toFixed(2), TYPES[r.t], r.acc, r.t===2?"":"自己", CUR.code, "預設帳本", r.n||"", r.to||""].map(csvCell).join(","));
         });
         var blob = new Blob(["\uFEFF" + lines.join("\r\n")], {type:"text/csv;charset=utf-8"});
         var a = document.createElement("a");
@@ -1488,6 +1555,12 @@
         });
         var accNameInp = $("accName");
         if(accNameInp) accNameInp.addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); if(accAddBtn) accAddBtn.click(); } });
+        var curSel = $("curSelect");
+        if(curSel){
+          curSel.innerHTML = CURRENCIES.map(function(c){ return '<option value="' + c.code + '">' + c.name + "（" + c.code + " · " + c.sym + "）</option>"; }).join("");
+          curSel.value = CUR.code;
+          curSel.addEventListener("change", function(){ setCurrency(this.value); });
+        }
         $("btnRestore").addEventListener("click", function(){
           if(!armedRestore){
             armedRestore = true;
@@ -1519,6 +1592,7 @@
         viewMonth = (max==="0000-00") ? cur : max;
       })();
       bind();
+      applyCurrencyUI();
       refreshFilterOptions();
       renderAll();
     </script>
@@ -1550,7 +1624,7 @@
           return isNaN(v) ? NaN : (neg ? -v : v);
         }
         function fmtTween(v){
-          return (v<0?"−":"") + "HK$" + Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2});
+          return (v<0?"−":"") + CUR_SYM + Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2});
         }
         function tween(el, from, to){
           var dur = 700, start = null;
@@ -1653,7 +1727,7 @@ return '<div class="bud-row"><div class="bud-top"><span class="bud-name">' + esc
 '<span class="bud-nums">已用 <b>' + fmtMoney(spentC) + '</b> / ' + (budDollars==null? "未設定": fmtMoney(budDollars*100)) +
 (budDollars? '（' + Math.round(pct) + '%）': "") + '</span>' +
 (state? '<span class="bud-state ' + stateCls + '">' + state + '</span>': "") +
-'<span class="bud-edit">預算 $<input type="number" min="0" step="10" data-bud="' + esc(opts.key) + '" value="' + (budDollars==null? "": budDollars) + '" placeholder="未設定" aria-label="' + esc(name) + '預算" /></span></div>' +
+'<span class="bud-edit">預算 ' + CUR.sym + '<input type="number" min="0" step="10" data-bud="' + esc(opts.key) + '" value="' + (budDollars==null? "": budDollars) + '" placeholder="未設定" aria-label="' + esc(name) + '預算" /></span></div>' +
 (budDollars? '<div class="bud-track"><div class="bud-fill" style="width:' + w + '%;background:' + fill + '"></div></div>': "") +
 "</div>";
 }
@@ -1753,7 +1827,7 @@ var catOpts = EXP_CATS.map(function(c){ return '<option value="' + esc(c) + '">'
 var accOpts = allAccountNames().map(function(a){ return '<option value="' + esc(a) + '">' + esc(a) + "</option>"; }).join("");
 wrap.innerHTML = '<div class="recur-form">' +
 '<div class="full"><label class="fl" for="rcName">名稱</label><input id="rcName" type="text" placeholder="例如：八達通自動增值" /></div>' +
-'<div><label class="fl" for="rcAmt">金額（HKD）</label><input id="rcAmt" type="number" min="0" step="0.01" placeholder="100" /></div>' +
+'<div><label class="fl" for="rcAmt">金額（' + CUR.code + '）</label><input id="rcAmt" type="number" min="0" step="0.01" placeholder="100" /></div>' +
 '<div><label class="fl" for="rcDay">每月幾號</label><input id="rcDay" type="number" min="1" max="31" step="1" value="1" /></div>' +
 '<div><label class="fl" for="rcCat">類別</label><select id="rcCat">' + catOpts + '</select></div>' +
 '<div><label class="fl" for="rcAcc">帳戶</label><select id="rcAcc">' + accOpts + '</select></div>' +
@@ -1855,7 +1929,7 @@ showToast("已刪除定期項目");
 
 /* ================= 日曆檢視 ================= */
 var calMonth = null, calSel = null;
-function calCompact(cents){ return "$" + Math.round(cents/100).toLocaleString("en-US"); }
+function calCompact(cents){ return CUR.sym + Math.round(cents/100).toLocaleString("en-US"); }
 function renderCalendar(){
 var host = $("calHost"); if(!host) return;
 if(!calMonth) calMonth = viewMonth || todayStr().slice(0,7);
@@ -2058,7 +2132,7 @@ var d = new Date(dateStr+"T12:00:00");
 d.setDate(d.getDate()+delta);
 return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate());
 }
-var INC_WORDS = ["出糧","工資","薪金","月薪","獎金","花紅","bonus","兼職","零用","收錢","收款","入錢","入賬","退款","退錢","利息","股息"];
+var INC_WORDS = ["出糧","工資","薪金","月薪","獎金","花紅","bonus","兼職","零用","收錢","收款","入錢","入賬","退款","退錢","利息","股息","人工","份糧","salary","payday","wage","wages"];
 function detectType(text){
 var t = text.toLowerCase();
 for(var i=0;i<INC_WORDS.length;i++){ if(t.indexOf(INC_WORDS[i])>-1) return 1; }
@@ -2072,7 +2146,7 @@ if(/尋日|噚日|昨日/.test(text)) date = shiftDay(today,-1);
 else if(/前日/.test(text)) date = shiftDay(today,-2);
 else if(/聽日|明日/.test(text)) date = shiftDay(today,1);
 var amt = null, rest = text;
-var m = text.match(/(?:HK\$|\$)\s*(\d+(?:\.\d{1,2})?)|(\d+(?:\.\d{1,2})?)\s*(?:蚊|元|塊)/);
+var m = text.match(/(?:HK\$|US\$|NT\$|CN\$|A\$|C\$|S\$|\$|£|€|¥|₩)\s*(\d+(?:\.\d{1,2})?)|(\d+(?:\.\d{1,2})?)\s*(?:蚊|元|塊|鎊)/);
 if(m){ amt = parseFloat(m[1] || m[2]); rest = text.replace(m[0], " "); }
 else {
 var m2 = text.match(/\d+(?:\.\d{1,2})?/);
@@ -2092,7 +2166,7 @@ var prompt = "你係記帳助手。用戶講咗一句記帳描述，請先判斷
 "支出類別（type=0 時只可以揀其中一個）：" + EXP_CATS.join("、") + "\n" +
 "收入類別（type=1 時只可以揀其中一個）：" + INC_CATS.join("、") + "\n" +
 "只回覆一個 JSON 物件，唔好加其他文字：{\"type\":0或1,\"note\":\"備註\",\"amount\":金額數字,\"category\":\"類別\",\"date\":\"YYYY-MM-DD\"}\n" +
-"規則：type 0 代表支出、1 代表收入（例如出糧、兼職、收錢、退款係收入；買嘢、食飯、搭車係支出）；category 要同 type 對應嗰組類別；amount 係純數字（港幣），唔好加 $ 號；冇寫日期就用今日日期；note 係嗰樣嘢本身（例如「漢堡」），唔好包含金額；全程繁體中文。\n" +
+"規則：type 0 代表支出、1 代表收入（例如出糧、兼職、收錢、退款係收入；買嘢、食飯、搭車係支出）；category 要同 type 對應嗰組類別；amount 係純數字（" + CUR.name + " " + CUR.code + "），唔好加貨幣符號；冇寫日期就用今日日期；note 係嗰樣嘢本身（例如「漢堡」），唔好包含金額；全程繁體中文。\n" +
 "用戶講：「" + text + "」";
 var body = JSON.stringify({ contents: [{ parts: [{ text: prompt }]}], generationConfig: { temperature: 0.1, responseMimeType: "application/json" } });
 var url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -2144,7 +2218,7 @@ var catOpts = cats.map(function(c){ return '<option value="' + esc(c) + '"' + (c
 var accOpts = allAccountNames().map(function(a){ return '<option value="' + esc(a) + '"' + (a===chat.acc? " selected": "") + ">" + esc(a) + "</option>"; }).join("");
 card.innerHTML = '<div class="pv-t">修改預覽</div>' +
 '<div class="pv-row"><span class="k">類別</span><select id="pvCat">' + catOpts + '</select></div>' +
-'<div class="pv-row"><span class="k">金額（HKD）</span><input id="pvAmt" type="number" min="0" step="0.01" value="' + p.amount + '" /></div>' +
+'<div class="pv-row"><span class="k">金額（' + CUR.code + '）</span><input id="pvAmt" type="number" min="0" step="0.01" value="' + p.amount + '" /></div>' +
 '<div class="pv-row"><span class="k">帳戶</span><select id="pvAcc">' + accOpts + '</select></div>' +
 '<div class="pv-row"><span class="k">備註</span><input id="pvNote" type="text" value="' + esc(p.note) + '" /></div>' +
 '<div class="pv-row"><span class="k">日期</span><input id="pvDate" type="date" value="' + p.date + '" /></div>' +
@@ -2272,7 +2346,7 @@ $("chatOverlay").setAttribute("inert", "");
 }
 
 /* ================= 設定檔（匯入／匯出） =================
-   設定檔係一個 JSON 細檔，只含：期初結餘調整（以港幣元計）、每月預算、定期項目。
+   設定檔係一個 JSON 細檔，只含：貨幣選擇、期初結餘調整（以所選貨幣計）、每月預算、定期項目。
    唔包含逐筆紀錄，亦唔包含 Gemini API Key。匯入一次即刻套用，全部只存本機 localStorage。 */
 function setSettingsMsg(txt, ok){
 var el = $("settingsMsg"); if(!el) return;
@@ -2288,6 +2362,7 @@ app: "記帳本",
 kind: "jizhang-settings",
 version: 1,
 exportedAt: todayStr(),
+currency: CUR.code,
 accounts: ACC_OBJS.map(function(o){ return { name: o.name, kind: o.kind }; }),
 walletAdj: adj,
 budgets: { cats: b.cats, total: b.total, travel: b.travel },
@@ -2309,6 +2384,9 @@ function applySettings(obj){
 if(!obj || typeof obj!=="object") return { err: "設定檔格式唔啱，唔係 JSON 物件。" };
 if(obj.kind && obj.kind!=="jizhang-settings") return { err: "呢個唔係記帳本嘅設定檔（kind 唔符）。" };
 var parts = [];
+if(typeof obj.currency==="string" && currencyByCode(obj.currency)){
+if(setCurrency(obj.currency, true)) parts.push("貨幣 " + CUR.code);
+}
 if(Object.prototype.toString.call(obj.accounts)==="[object Array]"){
 var objs = [], seenA = {};
 obj.accounts.forEach(function(o){
@@ -2440,7 +2518,7 @@ var L = [];
 var min = "9999", max = "0000";
 records.forEach(function(r){ if(r.d<min) min=r.d; if(r.d>max) max=r.d;});
 L.push("由記帳網站自動產生，只含統計數字，唔包括逐筆紀錄全文。");
-L.push("資料範圍：" + min.slice(0,10) + " 至 " + max.slice(0,10) + "，共 " + records.length + " 筆紀錄。貨幣：HKD。");
+L.push("資料範圍：" + min.slice(0,10) + " 至 " + max.slice(0,10) + "，共 " + records.length + " 筆紀錄。貨幣：" + CUR.code + "（" + CUR.name + "）。");
 var map = accountBalances();
 L.push("", "一、帳戶結餘");
 var ta = 0, tl = 0;
