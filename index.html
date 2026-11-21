@@ -396,17 +396,27 @@
       .cal-nav button{ width:38px; height:38px; padding:0; display:inline-flex; align-items:center; justify-content:center; background:var(--surface2); border-radius:50%; }
       .cal-nav button#btnCalToday{ width:auto; height:auto; padding:7px 16px; border-radius:980px; font-size:13.5px; }
       .cal-sum{ color:var(--muted); font-size:13px; margin-left:auto; font-variant-numeric:tabular-nums; }
-      .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:5px; }
-      .cal-wd{ text-align:center; font-size:12px; color:var(--muted); font-weight:600; padding:4px 0; }
+      .cal-grid{ display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:5px; width:100%; }
+      .cal-wd{ text-align:center; font-size:12px; color:var(--muted); font-weight:600; padding:4px 0; min-width:0; }
       .cal-cell{ background:var(--surface2); border:1px solid transparent; border-radius:12px; min-height:64px; padding:6px 7px;
-        display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; font-weight:500; width:100%; }
+        display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; font-weight:500; width:100%; min-width:0; overflow:hidden; }
       .cal-cell .cd{ font-size:13.5px; font-weight:700; }
-      .cal-cell .co{ font-size:11.5px; color:var(--red); font-variant-numeric:tabular-nums; font-weight:600; line-height:1.25; }
-      .cal-cell .ci{ font-size:11px; color:var(--green); font-variant-numeric:tabular-nums; line-height:1.25; }
+      .cal-cell .co{ font-size:11.5px; color:var(--red); font-variant-numeric:tabular-nums; font-weight:600; line-height:1.25; max-width:100%; overflow-wrap:anywhere; }
+      .cal-cell .ci{ font-size:11px; color:var(--green); font-variant-numeric:tabular-nums; line-height:1.25; max-width:100%; overflow-wrap:anywhere; }
       .cal-cell.today{ border-color:var(--accent); }
       .cal-cell.sel{ border-color:var(--accent); box-shadow:0 0 0 2px rgba(0,113,227,.35); }
       .cal-cell.blank{ background:transparent; pointer-events:none; }
-      @media (max-width:640px){ .cal-cell{ min-height:56px; padding:5px 5px; border-radius:10px; } .cal-cell .co{ font-size:10.5px; } .cal-sum{ margin-left:0; width:100%; } }
+      @media (max-width:640px){
+        #view-cal, #view-cal .panel, #calHost, #calDayHost{ min-width:0; }
+        .cal-grid{ gap:3px; }
+        .cal-wd{ font-size:11px; padding:3px 0; }
+        .cal-cell{ min-height:56px; padding:4px 3px; border-radius:10px; }
+        .cal-cell .cd{ font-size:12.5px; }
+        .cal-cell .co{ font-size:10px; }
+        .cal-cell .ci{ font-size:9.5px; }
+        .cal-nav .cal-label{ min-width:0; flex:1; font-size:17px; }
+        .cal-sum{ margin-left:0; width:100%; }
+      }
       .cal-day-title{ font-weight:700; font-size:16px; margin-bottom:6px; }
       .cal-day-title .tot{ font-size:13px; color:var(--muted); font-weight:500; margin-left:8px; }
       /* ===== AI 入帳 chatbox ===== */
@@ -817,6 +827,7 @@
           <button type="button" id="btnKeyClear">清除 Key</button>
         </div>
         <div class="io-msg" id="keyMsg" role="status"></div>
+        <p class="hint" style="margin-top:8px">測試連接用快速驗證：先查模型清單確認條 Key，再用最細回應 ping 一次模型，正常 1–3 秒；最長等約 15 秒就會自動停，唔會無限等。</p>
         <p class="hint" id="keyState" style="margin-top:10px">未設定 API Key。</p>
         <div class="ai-actions">
           <button type="button" class="primary" id="btnAiRun">開始 AI 審核</button>
@@ -3074,23 +3085,60 @@ return JSON.parse(txt);
 /* Key 只經 x-goog-api-key header 傳送，唔放落網址（避免俾日誌同中間人記錄） */
 return go(base, { "Content-Type": "application/json", "x-goog-api-key": key});
 }
+function fetchTimeout(url, opts, ms){
+opts = opts || {};
+if(typeof AbortController === "undefined") return fetch(url, opts);
+var ctl = new AbortController();
+opts.signal = ctl.signal;
+var t = setTimeout(function(){ try{ ctl.abort(); }catch(e){} }, ms);
+return fetch(url, opts).then(function(r){ clearTimeout(t); return r; }, function(e){ clearTimeout(t); throw e; });
+}
+var testingKey = false;
 function testConnection(){
+if(testingKey) return;
 var key = currentKey();
 if(!key){ setMsg("keyMsg", "請先貼上 Gemini API Key，先可以測試連接。", false); return;}
-setMsg("keyMsg", "測試連接中…", true);
-/* 真發一個最細嘅 generateContent 請求，逐個模型試；齋查模型清單會照樣「成功」但實際審核用唔到 */
-var body = JSON.stringify({ contents: [{ parts: [{ text: "請只回覆 OK" }]}]});
-function tryModel(mi){
-var url = "https://generativelanguage.googleapis.com/v1beta/models/" + MODELS[mi] + ":generateContent";
-return fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: body }).then(function(resp){
+testingKey = true;
+var btn = $("btnKeyTest");
+if(btn){ btn.disabled = true; btn.textContent = "測試緊…"; }
+var started = Date.now();
+var stage = "驗證緊條 Key（查模型清單）";
+var timer = setInterval(function(){
+setMsg("keyMsg", stage + "…（已等 " + Math.max(1, Math.round((Date.now()-started)/1000)) + " 秒，最長約 15 秒，唔使重撳）", true);
+}, 1000);
+setMsg("keyMsg", "測試連接中…（快速驗證，正常 1–3 秒）", true);
+function finish(){ testingKey = false; clearInterval(timer); if(btn){ btn.disabled = false; btn.textContent = "測試連接"; } }
+function fail(msg){ finish(); setMsg("keyMsg", msg, false); }
+function secs(){ return ((Date.now()-started)/1000).toFixed(1); }
+/* 第一步：GET 模型清單 — 最輕量、通常 1 秒內回，Key 錯／未啟用會即刻現形，唔使逐個模型慢慢生成 */
+fetchTimeout("https://generativelanguage.googleapis.com/v1beta/models?pageSize=50", { method: "GET", headers: { "x-goog-api-key": key } }, 8000).then(function(resp){
 return resp.text().then(function(txt){
-if(resp.ok){ setMsg("keyMsg", "連接成功：條 Key 用得，模型 " + MODELS[mi] + " 有回應，可以開始 AI 審核。", true); return;}
-if((resp.status===404 || resp.status===503) && mi+1<MODELS.length) return tryModel(mi+1);
-setMsg("keyMsg", "連接失敗：" + errText(resp.status, txt), false);
+if(!resp.ok){ fail("連接失敗：" + errText(resp.status, txt)); return; }
+var names = [];
+try{ var j = JSON.parse(txt); (j.models || []).forEach(function(m){ if(m.name) names.push(m.name.replace(/^models\//, "")); }); }catch(e){}
+/* 揀清單入面真係有嘅模型；清單冇列 alias 就用最後一個 alias，總之只 ping 一次，唔逐個試到慢晒 */
+var chosen = "";
+for(var i=0;i<MODELS.length;i++){ if(names.indexOf(MODELS[i])>-1){ chosen = MODELS[i]; break; } }
+if(!chosen) chosen = MODELS[MODELS.length-1];
+stage = "Key 有效，試緊模型 " + chosen + " 回應";
+setMsg("keyMsg", stage + "…", true);
+var body = JSON.stringify({ contents: [{ parts: [{ text: "OK" }] }], generationConfig: { temperature: 0, maxOutputTokens: 2 } });
+var url = "https://generativelanguage.googleapis.com/v1beta/models/" + chosen + ":generateContent";
+fetchTimeout(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: body }, 10000).then(function(r2){
+return r2.text().then(function(t2){
+if(r2.ok){ finish(); setMsg("keyMsg", "連接成功（" + secs() + " 秒）：條 Key 用得，模型 " + chosen + " 有回應，可以開始 AI 審核。", true); return; }
+if(r2.status===404){ finish(); setMsg("keyMsg", "條 Key 本身有效（模型清單已回應，" + secs() + " 秒），但模型 " + chosen + " 暫時用唔到（HTTP 404）。AI 審核嗰陣會自動試其他模型，你亦可以遲啲再撳測試。", true); return; }
+fail("連接失敗：" + errText(r2.status, t2));
 });
-}).catch(function(){ setMsg("keyMsg", "連接失敗：網絡去唔到 Google API。" + NET_HINT, false);});
-}
-tryModel(0);
+}).catch(function(e){
+if(e && e.name==="AbortError"){ fail("連接失敗：等咗 10 秒模型都未回應，已經自動停咗，唔會再無限等落去。請檢查網絡再試，或者改用「複製摘要」。"); return; }
+fail("連接失敗：網絡去唔到 Google API。" + NET_HINT);
+});
+});
+}).catch(function(e){
+if(e && e.name==="AbortError"){ fail("連接失敗：驗證 Key 等咗 8 秒都未有回應，已經自動停咗。請檢查網絡再試。"); return; }
+fail("連接失敗：網絡去唔到 Google API。" + NET_HINT);
+});
 }
 
 /* ---------- 結果渲染與套用 ---------- */
